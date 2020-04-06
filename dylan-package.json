@@ -1,0 +1,12 @@
+{
+    "name": "protocol-buffers",
+    "description": "Google protocol buffers",
+    "version": "0.1",
+    "dependencies": [
+        "uncommon-dylan"
+    ],
+    "dev-dependencies": [
+        "testworks"
+    ],
+    "url": "https://github.com:cgay/protocol-buffers"
+}
