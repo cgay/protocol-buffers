@@ -1,0 +1,26 @@
+Module: dylan-user
+
+define library protocol-buffer-test
+  use testworks;
+  use uncommon-dylan;
+
+  use protocol-buffers-implementation;
+end;
+
+define test test-parse-varint ()
+  let frame = parse-frame(<varint-frame>, #(#x01, #x02));
+  assert-equal(frame.varint-bytes, bv(#x01));
+end test;
+
+/*
+define test repeated-test ()
+  let frame = parse-frame(<repeated-test-frame>, #(#x23, #x42, #x43, #x44, #x67, #x0, #x55));
+  let field-list = fields(frame);
+  static-checker(field-list[0], 0, 8, 8);
+  static-checker(field-list[1], 8, $unknown-at-compile-time, $unknown-at-compile-time);
+  static-checker(field-list[2], $unknown-at-compile-time, 8, $unknown-at-compile-time);
+  frame-field-checker(0, frame, 0, 8, 8);
+  frame-field-checker(1, frame, 8, 40, 48);
+  frame-field-checker(2, frame, 48, 8, 56);
+end;
+*/
