@@ -1,54 +1,29 @@
 Module: dylan-user
 
 define library protocol-buffers
-  use binary-data;
-  use uncommon-dylan;
+  // Libraries shared with test code. Should be kept in sync with
+  // protocol-buffers-test library definition in library-test.dylan.
+//  use io,
+//    import: { streams };
+  use uncommon-dylan,
+    import: { uncommon-dylan, uncommon-utils };
 
   export
-    protocol-buffers,
-    protocol-buffers-implementation;
+    protocol-buffers;
 end library;
 
+// Interface
 define module protocol-buffers
-/*
   create
-    <int32>,
-    <int64>,
-    <uint32>,
-    <uint64>,
-    <sint32>,
-    <sint64>,
-    <fixed32>,
-    <fixed64>,
-    <sfixed32>,
-    <sfixed64>;
-
-  create
-    <message>,
-    <error>,
-    initialized?,
-    clear,
-    byte-size,
-    serialize,
-    merge-from;
-
-  // Macros that need to be exported to compile the generated code.
-  create
-    define-message,
-    define-enum,
-    define-extend,
-    define-group,
-    define-service;
-*/
+    <protobuf>;
 end module;
 
-define module protocol-buffers-implementation
+define module protocol-buffers-internal
   use protocol-buffers;
 
-  use binary-data;
+  // Modules shared with test code. Should be kept in sync with
+  // protocol-buffers-internal from library-test.dylan.
+//  use streams;                  // for <buffer> and buffer-* functions
   use uncommon-dylan;
-
-  export
-    <varint-frame>,
-    varint-bytes;
+  use uncommon-utils;
 end module;

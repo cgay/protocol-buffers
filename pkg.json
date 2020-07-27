@@ -1,7 +1,7 @@
 {
     "name": "protocol-buffers",
     "deps": [
-        "binary-data head",
-        "uncommon-dylan head" ],
-    "location": "https://github.com/cgay/protocol-buffers"
+        "uncommon-dylan head"
+    ],
+    "location": "git@github.com:cgay/protocol-buffers"
 }
