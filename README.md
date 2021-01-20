@@ -14,6 +14,11 @@ embryonic
   1. Start with proto3, no required fields, if field has default value it's
      essentially unset, much simpler. No need for is-set vector, nor for
      %foo internal slot names and methods to guard their access.
+  1. Message field accessor functions will match the field names, without a
+     prefix. The idea is that each proto package maps to a Dylan module and
+     the field accessor methods will be sealed for performance. The expected
+     usage is to import the module with a prefix: pb/options(msg).  (This
+     may change, or we can annotate messages with a dylan_prefix option.)
   1. Write and debug wire format.
   1. Write an example of the expected protoc generated code, by hand.
   1. Write some tests that use the example to parse protos from a file.

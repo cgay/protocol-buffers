@@ -6,7 +6,8 @@ Synopsis: Implements, "by hand", protobuf descriptors in Dylan. This is for
 
 // This bootstrap file also functions as a way for me (cgay) to brainstorm what
 // the generated Dylan code should look like. That includes how the code should
-// be formatted, which may not exactly match the usual Dylan style.
+// be formatted by the protoc plugin, which may not exactly match the usual
+// Dylan style.
 
 // https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto
 
