@@ -2,10 +2,6 @@ Module: protocol-buffers-impl
 
 // https://developers.google.com/protocol-buffers/docs/encoding
 
-// TODO(cgay): in general I'm not worrying about large 64-bit ints that don't
-// fit in a Dylan <int> for now.  We'll need to handle it eventually, via
-// either <double-integer> or <machine-word>. I don't know the best method.
-
 // This'll do for a start. There's an interesting buffer implementation in
 // cl-protobufs that allows for back-patching the lengths of length-encoded
 // elements so that making two passes is unnecessary.
@@ -35,7 +31,7 @@ end;
 // Make a field tag to precede the field data itself, given the scalar type of
 // the field data.
 define function make-tag
-    (field-number :: <int>, type :: <scalar>) => (tag :: <int>)
+    (field-number :: <int>, type :: <scalar-type>) => (tag :: <int>)
   let wire-type
     = select (type)
         $bool,
@@ -59,7 +55,7 @@ end function;
 
 // Can `type` be used in a packed field?
 define inline function packed-type?
-    (type :: <scalar>) => (_ :: <bool>)
+    (type :: <scalar-type>) => (_ :: <bool>)
   type == $string | type == $bytes
 end function;
 
@@ -87,20 +83,33 @@ end;
 // ensuring that `i` is the appropriate size (see encode-int32 et al) by either
 // truncating or signaling an error.
 define function encode-varint
-    (buf :: <buffer>, int :: <int>) => (nbytes :: <int>)
-  iterate loop (i :: <int> = int, nbytes :: <int> = 1)
-    let byte = logand(127, i);
-    i := ash>>(i, 7);
-    let done? = zero?(i);
-    add!(buf, if (done?)
-                byte
-              else
-                logior(128, byte) // more bytes to follow
-              end);
-    if (done?)
-      nbytes
-    else
-      loop(i, nbytes + 1)
+    (buf :: <buffer>, int :: ga/<integer>) => (nbytes :: <int>)
+  // Unroll the first loop iteration, after which we have a normal dylan <integer>.
+  let byte1 :: <byte> = ga/logand(127, int);
+  let last? = zero?(int);
+  add!(buf, last? & byte1 | logior(128, byte1));
+  if (last?)
+    1                           // wrote 1 byte
+  else
+    let int :: <int> = ga/ash(int, -7);
+    iterate loop (i :: <int> = int, nbytes :: <int> = 2)
+      if (nbytes > 10)            // BUG!
+        10                        // negative numbers always 10 bytes
+      else
+        let byte = logand(127, i);
+        i := ash>>(i, 7);
+        let done? = zero?(i);
+        add!(buf, if (done?)
+                    byte
+                  else
+                    logior(128, byte) // more bytes to follow
+                  end);
+        if (done?)
+          nbytes
+        else
+          loop(i, nbytes + 1)
+        end
+      end
     end
   end
 end function;

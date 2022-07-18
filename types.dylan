@@ -28,9 +28,9 @@ define open abstract class <protocol-buffer-enum> (<protocol-buffer-object>)
 end class;
 
 
-// A set of constant to identify the scalar types defined in the protobuf spec.
-// https://developers.google.com/protocol-buffers/docs/proto3#scalar
-define enum <scalar> ()
+// A set of constants to identify the scalar types defined in the protobuf
+// spec.  https://developers.google.com/protocol-buffers/docs/proto3#scalar
+define enum <scalar-type> ()
   $bool;
   $bytes;
   $double;
@@ -48,20 +48,4 @@ define enum <scalar> ()
   $uint64;
 end enum;
 
-// Generally assuming 64-bit platform for now.
-
-define constant $max-int32 :: <int> = ash(1, 32) - 1;
-define constant $min-int32 :: <int> = -ash(1, 32);
-define constant $max-int64 :: <int> = $maximum-integer;
-define constant $min-int64 :: <int> = $minimum-integer;
-
-// In theory I should be able to redefine these all as equivalent to <int> at
-// some point and it should omit some unnecessary type checks, then run
-// benchmarks.
-
-define constant <int32> = limited(<int>, min: -(2 ^ 31), max: $max-int32);
-define constant <int64> = <int>;
-define constant <uint32> = limited(<int>, min: 0, max: 2 ^ 32 - 1);
-define constant <uint64> = <uint>;
-
-define constant <index> = <uint>;
+define constant <index> = <uint64>;

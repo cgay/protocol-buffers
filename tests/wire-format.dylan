@@ -12,22 +12,57 @@ define test test-make-wire-tag ()
   assert-equal(#b11111111_010, make-wire-tag(255, $wire-type-length-delimited));
 end test;
 
-define test test-decode-varint ()
-  assert-equal(1, decode-varint(buffer(1), 0));
-  assert-equal(300, decode-varint(buffer(172, 2), 0));
-  // 8 bytes of 7 low bits each = 56 bits ++ 5 more bits ++ the sign bit ++
-  // Dylan tag bits = 64, so this is the biggest integer we can encode for now.
-  assert-equal($maximum-integer,
-               decode-varint(buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F),
-                             0));
+define test test-encode/decode-varint ()
+  for (item in list(list(0, buffer(0)),
+                    list(1, buffer(1)),
+                    list(300, buffer(#xAC, #x02)),
+                    list(270, buffer(#x8E, #x02)),
+                    list(86942, buffer(#x9E, #xA7, #x05)),
+                    // 8 bytes of 7 low bits each = 56 bits ++ 5 more bits ++ the sign
+                    // bit ++ Dylan tag bits = 64, so this is the biggest integer we can
+                    // encode for now.  Ultimately we'll need to decide on a strategy for
+                    // encoding all 64-bit values.
+                    list($maximum-integer, buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F)),
+                    list($minimum-integer, buffer(255, 255, 255, 255, 255, 255, 255, 255, #x3F))
+                    // list(-1, buffer(255, 255, 255, 255, 255, 255, 255, 255, 255, 1))
+                      ))
+    let (i, bytes) = apply(values, item);
+    local
+      method encode-varint-bytes (i :: <int>) => (bytes :: <vector>)
+        let buf = make(<buffer>);
+        let n = encode-varint(buf, i);
+        copy-sequence(buf, end: n)
+      end,
+      method decode-varint-bytes (bytes :: <seq>) => (i :: <int>)
+        let buf = apply(buffer, bytes);
+        let (i, nbytes) = decode-varint(buf, 0);
+        assert-equal(nbytes, bytes.size);
+        i
+      end;
+    assert-equal(encode-varint-bytes(i), bytes);
+    assert-equal(i, decode-varint-bytes(bytes));
+  end for;
 end test;
 
-define function varint-bytes
-    (i :: <int>) => (bytes :: <vector>)
-  let buffer = make(<buffer>, size: 10);
-  let n = encode-varint(buffer, i);
-  copy-sequence(buffer, end: n)
-end;
+// Two benchmarks to give an idea (when compared to each other) how much of a
+// slowdown generic-arithmetic causes.
+
+define benchmark benchmark-encode-varint-$maximum-integer ()
+  let buf = make(<buffer>, size: 10);
+  for (i from 1 to 1_000_000)
+    buf.size := 0;
+    encode-varint(buf, $maximum-integer);
+  end;
+end benchmark;
+
+define benchmark benchmark-encode-varint-max-uint64 ()
+  let max-uint64 = ga/-(ga/^(2, 64), 1);
+  let buf = make(<buffer>, size: 10);
+  for (i from 1 to 1_000_000)
+    buf.size := 0;
+    encode-varint(buf, max-uint64);
+  end;
+end benchmark;
 
 define constant $zigzag-32-bit-test-cases
   = #(#(0, 0),
@@ -68,8 +103,8 @@ define function round-trip-varint (n :: <int>, encoder, decoder)
   assert-equal(n, new-n);
 end function;
 
-define test test-encode/decode-uint32 ()
-  for (i in list(0, 1, 2, $max-int32 - 1, $max-int32))
+define test test-encode/decode-int32 ()
+  for (i in list($min-int32, $min-int32 + 1, -2, -1, 0, 1, 2, $max-int32 - 1, $max-int32))
     round-trip-varint(i, encode-uint32, decode-uint32);
   end;
 end test;

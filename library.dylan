@@ -1,12 +1,15 @@
 Module: dylan-user
 
 define library protocol-buffers
+  use big-integers;             // side-effect only
   use collections,
     import: { bit-vector };
+  use generic-arithmetic;
   use io,
-    import: { format };
+    import: { format, format-out };
   use uncommon-dylan,
     import: { byte-vector,
+              machine-words,
               uncommon-dylan,
               uncommon-utils };
 
@@ -33,12 +36,20 @@ define module protocol-buffers-impl
     import: { <byte>, <byte-vector> };
   use format,
     rename: { format-to-string => sformat }; // for brevity
+  use format-out;
+  use generic-arithmetic,
+    prefix: "ga/";
+  use machine-words,
+    import: { $machine-word-size };
   use uncommon-dylan;
   use uncommon-utils;
 
   // For the test suite
   export
     $max-int32,
+    $max-int64,
+    $min-int32,
+    $min-int64,
     $wire-type-32-bit,
     $wire-type-64-bit,
     $wire-type-length-delimited,
