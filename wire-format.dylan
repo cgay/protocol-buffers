@@ -83,54 +83,59 @@ end;
 // ensuring that `i` is the appropriate size (see encode-int32 et al) by either
 // truncating or signaling an error.
 define function encode-varint
-    (buf :: <buffer>, int :: ga/<integer>) => (nbytes :: <int>)
-  // Unroll the first loop iteration, after which we have a normal dylan <integer>.
-  let byte1 :: <byte> = ga/logand(127, int);
-  let last? = zero?(int);
-  add!(buf, last? & byte1 | logior(128, byte1));
-  if (last?)
+    (buf :: <buffer>, num :: ga/<integer>) => (nbytes :: <int>)
+  // Unroll the first loop iteration, after which num is guaranteed to be a
+  // normal dylan integer.
+  let byte1 :: <byte> = ga/logand(127, num);
+  let num :: <int> = ga/ash(num, -7);
+  add!(buf, zero?(num) & byte1 | logior(128, byte1));
+  if (zero?(num))
     1                           // wrote 1 byte
   else
-    let int :: <int> = ga/ash(int, -7);
-    iterate loop (i :: <int> = int, nbytes :: <int> = 2)
-      if (nbytes > 10)            // BUG!
-        10                        // negative numbers always 10 bytes
+    iterate loop (n :: <int> = num, nbytes :: <int> = 2)
+      let byte = logand(127, n);
+      let n = ash>>(n, 7);
+      // Negative numbers are always 10 bytes.
+      if (zero?(n) | nbytes == 10)
+        add!(buf, byte);
+        nbytes
       else
-        let byte = logand(127, i);
-        i := ash>>(i, 7);
-        let done? = zero?(i);
-        add!(buf, if (done?)
-                    byte
-                  else
-                    logior(128, byte) // more bytes to follow
-                  end);
-        if (done?)
-          nbytes
-        else
-          loop(i, nbytes + 1)
-        end
+        add!(buf, logior(128, byte));
+        loop(n, nbytes + 1)
       end
     end
   end
 end function;
 
-// Decode a varint from `buf` starting at byte index `start`.
+// Decode a varint from `buf` starting at byte index `start`. Return the index
+// after the last byte consumed.
 define function decode-varint
-    (buf :: <buffer>, start :: <index>) => (i :: <int>, _end :: <index>)
-  let varint :: <int> = 0;
+    (buf :: <buffer>, start :: <index>) => (num :: <int>, index :: <index>)
+  let varint :: ga/<integer> = 0;
   let shift :: <int> = 0;
   let index :: <index> = start;
   let high-bit-set? = #t;
-  for (i from 0 below 10,       // max 10 7-bit bytes on 64-bit.
+  // max 10 7-bit bytes for negative numbers or int64
+  for (i from 0 below 10,
        while: high-bit-set?)
     let byte :: <byte> = buf[index];
     high-bit-set? := logbit?(7, byte);
-    varint := logior(varint,
-                     logand(ash<<(logand(byte, 127), shift),
-                            $maximum-integer));
+    varint := ga/logior(varint, ga/ash(ga/logand(byte, 127), shift));
     inc!(index);
     inc!(shift, 7);
   end;
+/*
+  if (high-bit-set?)
+    // The high bit was still on for the 9th byte so the final byte may cause
+    // overflow. Use big integers.
+    // TODO: benchmark against an implementation that handles integer overflow
+    //       and only then uses big integers. How common are negative int64s?
+    let byte :: <int> = buf[index];
+    inc!(index);
+    let negative? = logbit?(6, byte);
+    let byte = logand(
+    if (negative?)
+*/
   values(varint, index)
 end function;
 

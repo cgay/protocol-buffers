@@ -18,22 +18,20 @@ define test test-encode/decode-varint ()
                     list(300, buffer(#xAC, #x02)),
                     list(270, buffer(#x8E, #x02)),
                     list(86942, buffer(#x9E, #xA7, #x05)),
-                    // 8 bytes of 7 low bits each = 56 bits ++ 5 more bits ++ the sign
-                    // bit ++ Dylan tag bits = 64, so this is the biggest integer we can
-                    // encode for now.  Ultimately we'll need to decide on a strategy for
-                    // encoding all 64-bit values.
-                    list($maximum-integer, buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F)),
-                    list($minimum-integer, buffer(255, 255, 255, 255, 255, 255, 255, 255, #x3F))
-                    // list(-1, buffer(255, 255, 255, 255, 255, 255, 255, 255, 255, 1))
-                      ))
+                    list($min-int32, buffer(3)),
+                    list($max-int32, buffer(4)),
+                    list($max-uint32, buffer(5)),
+                    list($max-uint64, buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F)),
+                    list($min-int64, buffer(255, 255, 255, 255, 255, 255, 255, 255, #x3F)),
+                    list(-1, buffer(255, 255, 255, 255, 255, 255, 255, 255, 255, 1))))
     let (i, bytes) = apply(values, item);
     local
-      method encode-varint-bytes (i :: <int>) => (bytes :: <vector>)
+      method encode-varint-bytes (i :: ga/<integer>) => (bytes :: <vector>)
         let buf = make(<buffer>);
         let n = encode-varint(buf, i);
         copy-sequence(buf, end: n)
       end,
-      method decode-varint-bytes (bytes :: <seq>) => (i :: <int>)
+      method decode-varint-bytes (bytes :: <seq>) => (i :: ga/<integer>)
         let buf = apply(buffer, bytes);
         let (i, nbytes) = decode-varint(buf, 0);
         assert-equal(nbytes, bytes.size);
@@ -95,16 +93,25 @@ end test;
 define function round-trip-varint (n :: <int>, encoder, decoder)
   let buf = make(<buffer>);
   let nbytes = encoder(buf, n);
-  assert-true(nbytes > 0 & nbytes <= 10,
-              sformat("for n = %d, encoded as %d bytes", n, nbytes));
+  check-true(sformat("for n = %d, encoded as %d bytes", n, nbytes),
+             nbytes > 0 & nbytes <= 10);
   let (new-n, index) = decoder(buf, 0);
-  assert-equal(index, nbytes,
-               sformat("for n = %d, new-n = %d, index = %d", n, new-n, index));
-  assert-equal(n, new-n);
+  check-equal(sformat("for n = %d, new-n = %d, index = %d", n, new-n, index),
+              index, nbytes);
+  check-equal("same value", n, new-n);
 end function;
 
 define test test-encode/decode-int32 ()
-  for (i in list($min-int32, $min-int32 + 1, -2, -1, 0, 1, 2, $max-int32 - 1, $max-int32))
-    round-trip-varint(i, encode-uint32, decode-uint32);
-  end;
+  local method round-trip (n)
+          round-trip-varint(n, encode-int32, decode-int32)
+        end;
+  round-trip($min-int32);
+  round-trip($min-int32 + 1);
+  round-trip(-2);
+  round-trip(-1);
+  round-trip(0);
+  round-trip(1);
+  round-trip(2);
+  round-trip($max-int32 - 1);
+  round-trip($max-int32);
 end test;
