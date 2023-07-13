@@ -27,7 +27,6 @@ end class;
 define open abstract class <protocol-buffer-enum> (<protocol-buffer-object>)
 end class;
 
-
 // A set of constants to identify the scalar types defined in the protobuf
 // spec.  https://developers.google.com/protocol-buffers/docs/proto3#scalar
 define enum <scalar-type> ()
