@@ -87,11 +87,11 @@ end;
 // ensuring that `num` is the appropriate size (see encode-int32 et al) by either
 // truncating or signaling an error.
 define function encode-varint
-    (buf :: <buffer>, num :: ga/<integer>) => (nbytes :: <int>)
+    (buf :: <buffer>, num :: <big-int>) => (nbytes :: <int>)
   // Unroll the first loop iteration, after which (on 64-bit) num is guaranteed
   // to be a normal dylan integer.
-  let byte1 :: <byte> = ga/logand(127, num);
-  let num :: <int> = ga/ash(num, -7);
+  let byte1 :: <byte> = big-logand(127, num);
+  let num :: <int> = big-ash(num, -7);
   add!(buf, iff(zero?(num),
                 byte1,
                 logior(128, byte1)));
@@ -116,8 +116,8 @@ end function;
 // Decode a varint from `buf` starting at byte index `start`. Return the index
 // after the last byte consumed.
 define function decode-varint
-    (buf :: <buffer>, start :: <index>) => (num :: ga/<integer>, index :: <index>)
-  // Use <int> for first 8 bytes; if more convert to ga/<integer>.
+    (buf :: <buffer>, start :: <index>) => (num :: <big-int>, index :: <index>)
+  // Use <int> for first 8 bytes; if more convert to <big-int>.
   let varint :: <int> = 0;
   let index :: <index> = start;
   let shift :: <int> = 0;
@@ -133,11 +133,11 @@ define function decode-varint
     inc!(shift, 7);
   end;
   if (high-bit-set?)
-    // Too large for <int>; switch to ga/<integer> for 9th and 10th bytes.
-    let varint :: ga/<integer> = varint;
+    // Too large for <int>; switch to <big-int> for 9th and 10th bytes.
+    let varint :: <big-int> = varint;
     let byte :: <byte> = buf[index];
     high-bit-set? := logbit?(7, byte);
-    varint := ga/logior(varint, ga/ash(logand(byte, 127), shift));
+    varint := big-logior(varint, big-ash(logand(byte, 127), shift));
     format-out("decode-varint: byte: %02X, high-bit?: %=, varint: %d, index: %d, shift: %d\n",
                byte, high-bit-set?, varint, index, shift);
     if (high-bit-set?)
@@ -148,7 +148,7 @@ define function decode-varint
       if (high-bit-set?)
         pb-error("decode-varint: high bit set on 10th byte");
       end;
-      varint := ga/logior(varint, ga/ash(logand(byte, 127), shift));
+      varint := big-logior(varint, big-ash(logand(byte, 127), shift));
       format-out("decode-varint: byte: %02X, high-bit?: %=, varint: %d, index: %d, shift: %d\n",
                  byte, high-bit-set?, varint, index, shift);
     end;

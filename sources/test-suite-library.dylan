@@ -14,7 +14,10 @@ define module protocol-buffers-test-suite
   use format,
     rename: { format-to-string => sformat }; // for brevity
   use generic-arithmetic,
-    prefix: "ga/";
+    prefix: "big-",
+    rename: { $maximum-integer => $maximum-big-int,
+              $minimum-integer => $minimum-big-int,
+              <integer> => <big-int> };
   use protocol-buffers-impl;
   use testworks;
   use uncommon-dylan;

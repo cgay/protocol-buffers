@@ -38,7 +38,10 @@ define module protocol-buffers-impl
     rename: { format-to-string => sformat }; // for brevity
   use format-out;
   use generic-arithmetic,
-    prefix: "ga/";
+    prefix: "big-",
+    rename: { $maximum-integer => $maximum-big-int,
+              $minimum-integer => $minimum-big-int,
+              <integer> => <big-int> };
   use machine-words,
     import: { $machine-word-size };
   use uncommon-dylan;

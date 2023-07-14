@@ -4,10 +4,10 @@ Module: protocol-buffers-test-suite
 
 /*
 I have a feeling these will be a useful reference for a while.
-$minimum-integer:                          -2000_0000_0000_0000
-$maximum-integer:                           1fff_ffff_ffff_ffff
-ga/$minimum-integer: #ex8000_0000_0000_0000_0000_0000_0000_0000
-ga/$maximum-integer: #ex7FFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF
+$minimum-integer:                       -2000_0000_0000_0000
+$maximum-integer:                        1fff_ffff_ffff_ffff
+$minimum-big-int: #ex8000_0000_0000_0000_0000_0000_0000_0000
+$maximum-big-int: #ex7FFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF
 */
 
 define function buffer
@@ -22,66 +22,50 @@ define test test-make-wire-tag ()
   assert-equal(#b11111111_010, make-wire-tag(255, $wire-type-len));
 end test;
 
-define test test-encode/decode-varint ()
-  local
-    method encode (i :: ga/<integer>) => (bytes :: <vector>)
-      let buf = make(<buffer>);
-      let n = encode-varint(buf, i);
-      copy-sequence(buf, end: n)
-    end,
-    method decode (bytes :: <seq>) => (i :: ga/<integer>)
-      let buf = apply(buffer, bytes);
-      let (i, nbytes) = decode-varint(buf, 0);
-      assert-equal(nbytes, bytes.size);
-      i
-    end;
-  assert-equal(encode(0), buffer(0));
-  assert-equal(decode(buffer(0)), 0);
-
-  assert-equal(encode(1), buffer(1));
-  assert-equal(decode(buffer(1)), 1);
-
-  assert-equal(encode(300), buffer(#xAC, #x02));
-  assert-equal(decode(buffer(#xAC, #x02)), 300);
-
-  assert-equal(encode(270), buffer(#x8E, #x02));
-  assert-equal(decode(buffer(#x8E, #x02)), 270);
-
+define test test-encode-varint ()
+  local method encode (i :: <big-int>) => (bytes :: <vector>)
+          let buf = make(<buffer>);
+          let n = encode-varint(buf, i);
+          copy-sequence(buf, end: n)
+        end;
+  assert-equal(encode(-2),    buffer(254, 255, 255, 255, 255, 255, 255, 255, 255, 1));
+  assert-equal(encode(0),     buffer(0));
+  assert-equal(encode(1),     buffer(1));
+  assert-equal(encode(270),   buffer(#x8E, #x02));
+  assert-equal(encode(300),   buffer(#xAC, #x02));
   assert-equal(encode(86942), buffer(#x9E, #xA7, #x05));
-  assert-equal(decode(buffer(#x9E, #xA7, #x05)), 86942);
-
-  let buf = buffer(254, 255, 255, 255, 255, 255, 255, 255, 255, 1);
-  assert-equal(decode(buf), -2);
-  assert-equal(encode(-2), buf);
-
 /* TODO
-  let buf = buffer(...);
   assert-equal(encode($min-int32), buf);
-  assert-equal($min-int32, decode(buf));
-
-  let buf = buffer(...);
   assert-equal(encode($max-int32), buf);
-  assert-equal($max-int32, decode(buf));
-
-  let buf = buffer(...);
   assert-equal(encode($max-uint32), buf);
-  assert-equal($max-uint32, decode(buf));
+  assert-equal(encode(-1), buffer(255, 255, 255, 255, 255, 255, 255, 255, 255, 1));
+  assert-equal(encode(-2), buffer(254, 255, 255, 255, 255, 255, 255, 255, 255, 1));
+  assert-equal(encode($max-uint64), buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F));
+  assert-equal(encode($min-int64), buffer(255, 255, 255, 255, 255, 255, 255, 255, #x3F));
+*/
+end test;
 
-  let buf = buffer(255, 255, 255, 255, 255, 255, 255, 255, 255, 1);
-  assert-equal(encode(-1), buf);
-  assert-equal(decode(buf), -1);
-
-  let buf = buffer(254, 255, 255, 255, 255, 255, 255, 255, 255, 1);
-  assert-equal(encode(-2), buf);
-  assert-equal(decode(buf), -2);
-
-  let buf = buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F);
-  assert-equal(encode($max-uint64), buf);
-  assert-equal(decode(buf), $max-uint64);
-
-  let buf = buffer(255, 255, 255, 255, 255, 255, 255, 255, #x3F);
-  assert-equal(encode($min-int64), buf);
-  assert-equal(decode(buf), $min-int64);
+define test test-decode-varint ()
+  local method decode (bytes :: <seq>) => (i :: <big-int>)
+          let buf = apply(buffer, bytes);
+          let (i, nbytes) = decode-varint(buf, 0);
+          assert-equal(nbytes, bytes.size);
+          i
+        end;
+  assert-equal(-2,    decode(buffer(254, 255, 255, 255, 255, 255, 255, 255, 255, 1)));
+  assert-equal(0,     decode(buffer(0)));
+  assert-equal(1,     decode(buffer(1)));
+  assert-equal(270,   decode(buffer(#x8E, #x02)));
+  assert-equal(300,   decode(buffer(#xAC, #x02)));
+  assert-equal(86942, decode(buffer(#x9E, #xA7, #x05)));
+/* TODO
+  assert-equal($min-int32,  decode(...));
+  assert-equal($max-int32,  decode(...));
+  assert-equal($max-uint32, decode(...));
+  assert-equal(-1,          decode(buffer(255, 255, 255, 255, 255, 255, 255, 255, 255, 1)));
+  assert-equal(-2,          decode(buffer(254, 255, 255, 255, 255, 255, 255, 255, 255, 1)));
+  assert-equal($max-uint64, decode(buffer(255, 255, 255, 255, 255, 255, 255, 255, #x1F)));
+  assert-equal($min-int64,  decode(buffer(255, 255, 255, 255, 255, 255, 255, 255, #x3F)));
 */
 end test;
 
@@ -97,7 +81,7 @@ define benchmark benchmark-encode-varint-$maximum-integer ()
 end benchmark;
 
 define benchmark benchmark-encode-varint-max-uint64 ()
-  let max-uint64 = ga/-(ga/^(2, 64), 1);
+  let max-uint64 = big--(big-^(2, 64), 1);
   let buf = make(<buffer>, size: 10);
   for (i from 1 to 1_000_000)
     buf.size := 0;
