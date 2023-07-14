@@ -15,11 +15,11 @@ define constant <buffer> = limited(<stretchy-vector>, of: <byte>);
 // 4  End group         groups (deprecated)
 // 5  32-bit            fixed32, sfixed32, float
 define constant $wire-type-varint :: <int> = 0;
-define constant $wire-type-64-bit :: <int> = 1;
-define constant $wire-type-length-delimited :: <int> = 2;
-define constant $wire-type-start-group :: <int> = 3;
-define constant $wire-type-end-group :: <int> = 4;
-define constant $wire-type-32-bit :: <int> = 5;
+define constant $wire-type-i64    :: <int> = 1;
+define constant $wire-type-len    :: <int> = 2;
+define constant $wire-type-sgroup :: <int> = 3;
+define constant $wire-type-egroup :: <int> = 4;
+define constant $wire-type-i32    :: <int> = 5;
 
 // Make a field tag that precedes the field data itself. The tag is the
 // combination of a wire type (3 bits) and a field number (29 bits).
@@ -41,23 +41,27 @@ define function make-tag
         $fixed32,
         $float,
         $sfixed32
-          => $wire-type-32-bit;
+          => $wire-type-i32;
         $double,
         $fixed64,
         $sfixed64
-          => $wire-type-64-bit;
+          => $wire-type-i64;
         $bytes,
         $string
-          => $wire-type-length-delimited;
+          => $wire-type-len;
       end;
   make-wire-tag(field-number, wire-type)
 end function;
+
+ignore(make-tag);
 
 // Can `type` be used in a packed field?
 define inline function packed-type?
     (type :: <scalar-type>) => (_ :: <bool>)
   type == $string | type == $bytes
 end function;
+
+ignore(packed-type?);
 
 define function zigzag-encode-32
     (n :: <int32>) => (_ :: <int>)
@@ -79,16 +83,18 @@ define function zigzag-decode-64
   logxor(ash>>(n, 1), - logand(n, 1))
 end;
 
-// Encode integer `i` as a varint into `buffer`. The caller is responsible for
-// ensuring that `i` is the appropriate size (see encode-int32 et al) by either
+// Encode integer `num` as a varint into `buf`. The caller is responsible for
+// ensuring that `num` is the appropriate size (see encode-int32 et al) by either
 // truncating or signaling an error.
 define function encode-varint
     (buf :: <buffer>, num :: ga/<integer>) => (nbytes :: <int>)
-  // Unroll the first loop iteration, after which num is guaranteed to be a
-  // normal dylan integer.
+  // Unroll the first loop iteration, after which (on 64-bit) num is guaranteed
+  // to be a normal dylan integer.
   let byte1 :: <byte> = ga/logand(127, num);
   let num :: <int> = ga/ash(num, -7);
-  add!(buf, zero?(num) & byte1 | logior(128, byte1));
+  add!(buf, iff(zero?(num),
+                byte1,
+                logior(128, byte1)));
   if (zero?(num))
     1                           // wrote 1 byte
   else
@@ -110,32 +116,45 @@ end function;
 // Decode a varint from `buf` starting at byte index `start`. Return the index
 // after the last byte consumed.
 define function decode-varint
-    (buf :: <buffer>, start :: <index>) => (num :: <int>, index :: <index>)
-  let varint :: ga/<integer> = 0;
-  let shift :: <int> = 0;
+    (buf :: <buffer>, start :: <index>) => (num :: ga/<integer>, index :: <index>)
+  // Use <int> for first 8 bytes; if more convert to ga/<integer>.
+  let varint :: <int> = 0;
   let index :: <index> = start;
+  let shift :: <int> = 0;
   let high-bit-set? = #t;
-  // max 10 7-bit bytes for negative numbers or int64
-  for (i from 0 below 10,
+  for (i from 0 to 7,
        while: high-bit-set?)
     let byte :: <byte> = buf[index];
     high-bit-set? := logbit?(7, byte);
-    varint := ga/logior(varint, ga/ash(ga/logand(byte, 127), shift));
+    varint := logior(varint, ash(logand(byte, 127), shift));
+    format-out("decode-varint: byte: %02X, high-bit?: %=, varint: %d, index: %d, shift: %d\n",
+               byte, high-bit-set?, varint, index, shift);
     inc!(index);
     inc!(shift, 7);
   end;
-/*
   if (high-bit-set?)
-    // The high bit was still on for the 9th byte so the final byte may cause
-    // overflow. Use big integers.
-    // TODO: benchmark against an implementation that handles integer overflow
-    //       and only then uses big integers. How common are negative int64s?
-    let byte :: <int> = buf[index];
-    inc!(index);
-    let negative? = logbit?(6, byte);
-    let byte = logand(
-    if (negative?)
-*/
+    // Too large for <int>; switch to ga/<integer> for 9th and 10th bytes.
+    let varint :: ga/<integer> = varint;
+    let byte :: <byte> = buf[index];
+    high-bit-set? := logbit?(7, byte);
+    varint := ga/logior(varint, ga/ash(logand(byte, 127), shift));
+    format-out("decode-varint: byte: %02X, high-bit?: %=, varint: %d, index: %d, shift: %d\n",
+               byte, high-bit-set?, varint, index, shift);
+    if (high-bit-set?)
+      inc!(index);
+      inc!(shift, 7);
+      byte := buf[index];
+      high-bit-set? := logbit?(7, byte);
+      if (high-bit-set?)
+        pb-error("decode-varint: high bit set on 10th byte");
+      end;
+      varint := ga/logior(varint, ga/ash(logand(byte, 127), shift));
+      format-out("decode-varint: byte: %02X, high-bit?: %=, varint: %d, index: %d, shift: %d\n",
+                 byte, high-bit-set?, varint, index, shift);
+    end;
+  end;
+  format-out("done\n");
+  force-out();
   values(varint, index)
 end function;
 
@@ -159,10 +178,14 @@ define function encode-uint64
   encode-varint(buf, n)
 end function;
 
+ignore(encode-uint64);
+
 define function decode-uint64
     (buf :: <buffer>, start :: <index>) => (n :: <uint64>, _end :: <index>)
   decode-varint(buf, start)
 end function;
+
+ignore(decode-uint64);
 
 define function encode-int32
     (buf :: <buffer>, n :: <int>) => (nbytes :: <int>)
@@ -180,15 +203,21 @@ define function encode-int64
   encode-varint(buf, n)
 end function;
 
+ignore(encode-int64);
+
 define function decode-int64
     (buf :: <buffer>, start :: <index>) => (n :: <int64>, _end :: <index>)
   decode-varint(buf, start)
 end function;
 
+ignore(decode-int64);
+
 define function encode-sint32
     (buf :: <buffer>, n :: <int>) => (nbytes :: <int>)
   encode-varint(buf, zigzag-encode-32(logand(n, $max-int32)))
 end function;
+
+ignore(encode-sint32);
 
 define function decode-sint32
     (buf :: <buffer>, start :: <index>) => (n :: <int32>, _end :: <index>)
@@ -196,13 +225,19 @@ define function decode-sint32
   values(zigzag-decode-32(logand(n, $max-int32)), index)
 end function;
 
+ignore(decode-sint32);
+
 define function encode-sint64
     (buf :: <buffer>, n :: <int>) => (nbytes :: <int>)
   encode-varint(buf, zigzag-encode-64(n));
 end function;
+
+ignore(encode-sint64);
 
 define function decode-sint64
     (buf :: <buffer>, start :: <index>) => (n :: <int64>, _end :: <index>)
   let (n, index) = decode-varint(buf, start);
   values(zigzag-decode-64(n), index)
 end function;
+
+ignore(decode-sint64);

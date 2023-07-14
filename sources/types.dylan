@@ -23,6 +23,12 @@ define open abstract class <protocol-buffer-message> (<protocol-buffer-object>)
   slot %field-is-set :: <bit-vector>;
 end class;
 
+ignore(%boolean-field-bits,
+       %boolean-field-bits-setter,
+       %unrecognized-field-bytes,
+       %unrecognized-field-bytes-setter,
+       %field-is-set, %field-is-set-setter);
+
 // Superclass of all generated protocol buffer enums.
 define open abstract class <protocol-buffer-enum> (<protocol-buffer-object>)
 end class;
