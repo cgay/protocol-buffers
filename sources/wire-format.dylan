@@ -2,11 +2,6 @@ Module: protocol-buffers-impl
 
 // https://developers.google.com/protocol-buffers/docs/encoding
 
-// This'll do for a start. There's an interesting buffer implementation in
-// cl-protobufs that allows for back-patching the lengths of length-encoded
-// elements so that making two passes is unnecessary.
-define constant <buffer> = limited(<stretchy-vector>, of: <byte>);
-
 // Wire types
 // 0  Varint            int32, int64, uint32, uint64, sint32, sint64, bool, enum
 // 1  64-bit            fixed64, sfixed64, double
@@ -117,6 +112,7 @@ end function;
 // after the last byte consumed.
 define function decode-varint
     (buf :: <buffer>, start :: <index>) => (num :: <big-int>, index :: <index>)
+  /*
   // Use <int> for first 8 bytes; if more convert to <big-int>.
   let varint :: <int> = 0;
   let index :: <index> = start;
@@ -156,6 +152,8 @@ define function decode-varint
   format-out("done\n");
   force-out();
   values(varint, index)
+*/
+  values(0, 0)
 end function;
 
 // Note that https://developers.google.com/protocol-buffers/docs/proto#updating

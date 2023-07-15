@@ -4,6 +4,7 @@ Files: library.dylan
        utilities.dylan
        types.dylan
        wire-format.dylan
+       idl.dylan
 Platforms: x86-freebsd
            x86-linux
            x86-netbsd

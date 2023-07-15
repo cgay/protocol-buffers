@@ -14,5 +14,3 @@ define function pb-error
              format-string: format-string,
              format-arguments: format-args));
 end function;
-
-ignore(pb-error);

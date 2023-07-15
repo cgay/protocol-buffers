@@ -47,29 +47,20 @@ The following are roughly in order of which should be done first.
 
      protocol-buffer: foo.proto -> foo-module.dylan, foo-library.dylan?
 
-* Protocol **buffers**. The intention is to use it as a buffer. For example if
-  you have a high QPS gRPC service you don't want to allocate a new proto
-  message per query when its lifetime is the query's lifetime. So the ability
-  to re-use messages is important. (I think this is more or less built in, via
-  the `clear-*` methods.)
+* Lazy decoding
 
-* Lazy (de)serialization
+* Specialized decoders. For example if the proto objects need to be initialized
+  in a specific order. (That particular case could be handled via proto option
+  annotations.)
 
-* Specialized (de)serializers. For example if the proto objects need to be
-  initialized in a specific order. (That particular case could be handled via
-  proto option annotations.)
+* Arenas to reduce memory churn
 
-* Object pools to reduce memory churn
-
-* POD objects? Protocol buffers are intended to be Plain Old Data. I'm curious
-  to see if there are differences in the way they can be implemented in Dylan.
-  For example, can we have field options to make the corresponding Dylan slot
-  be `constant` or `required-init-keyword:`?  Are there safe ways to add
-  behavior to protoc-generated classes in Dylan?
-
-* Can the [binary-data](https://github.com/cgay/binary-data) library be used
-  for parsing? I like the idea but I don't really want to end up having to fix
-  bugs in binary-data.
+* POD objects? Protocol buffers are intended to be Plain Old Data. In Go people
+  often write wrapper types for protobuf types. I'm curious to see if there are
+  differences in the way they can be implemented in Dylan.  For example, can we
+  have field options to make the corresponding Dylan slot be `constant` (not if
+  they need to be used with arenas) or `required-init-keyword:`?  Are there
+  safe ways to add behavior to protoc-generated classes in Dylan?
 
 
 # Generated Code Guide
@@ -81,8 +72,8 @@ rules:
 
 *  CamelCase is converted to lowercase-with-hyphens.
 *  snake_case is converted to lowercase-with-hyphens.
-*  Message names are surrounded by angle brackets. `message Foo` becomes
-   `class <foo>`. Nested `message Bar` becomes `<foo-bar>`.
+*  Message and enum names are surrounded by angle brackets. `message Foo`
+   becomes `class <foo>`. Nested `message Bar` becomes `<foo-bar>`.
 *  In package names, dot and underscore are converted to hyphen.
 
 ## Usage
@@ -105,9 +96,12 @@ message Person {
   Address address = 3
 
   enum HairColor {
+    option allow_alias = true;
     UNKNOWN = 0;
     BLACK = 1;
+    black = 1;  // reminder to self that this is valid
     BLONDE = 2;
+    blonde = 2;
   }
   HairColor hair_color = 4 [default = BLACK];
 }
@@ -129,28 +123,23 @@ Given the above `abc.proto` file, at least two Dylan files are generated:
 
         person-name,
         person-name-setter,
-        person-name-set?,
         clear-person-name,
 
         person-id,
         person-id-setter,
-        person-id-set?,
         clear-person-id,
 
         person-address,
         person-address-setter,
-        person-address-set?,
         clear-person-address,
 
         person-hair-color,
         person-hair-color-setter,
-        person-hair-color-set?,
         clear-person-hair-color,
 
         <person-address>,
         person-address-email,
         person-address-email-setter,
-        person-address-email-set?,
         clear-person-address-email,
 
         // TODO: enums aren't finished yet
@@ -166,21 +155,31 @@ Given the above `abc.proto` file, at least two Dylan files are generated:
     ```dylan
     Module: abc
 
-    define sealed class <person> (pb/<message>)
-      slot person-name :: <string> = "", init-keyword: name:;
-      slot person-id :: <int32> = 0, init-keyword: id:;
-      slot person-address :: false-or(<person-address>) = #f, init-keyword: address:;
-      slot person-hair-color :: <person-hair-color> = $person-hair-color-black, init-keyword: hair-color:;
+    define primary class <person> (pb/<message>)
+      slot person-name :: <string>,
+        init-keyword: name:,
+        init-value: "";
+      slot person-id :: <int32>,
+        init-keyword: id:
+        init-value: 0;
+      slot person-address :: false-or(<person-address>),
+        init-keyword: address:,
+        init-value: #f;
+      slot person-hair-color :: <person-hair-color>
+        init-keyword: hair-color:,
+        init-value: $person-hair-color-black;
     end class;
 
-    define sealed class <person-address> (pb/<message>)
-      slot person-address-email :: <string> = "", init-keyword: email:;
+    define primary class <person-address> (pb/<message>)
+      slot person-address-email :: <string>,
+        init-keyword: email:,
+        init-value: "";
     end class;
 
     define enum <person-hair-color> ()
-      $person-hair-color-unknown = 0;
-      $person-hair-color-black   = 1;
-      $person-hair-color-blonde  = 2;
+      $person-hair-color-unknown :: <int32> = 0;
+      $person-hair-color-black   :: <int32> = 1;
+      $person-hair-color-blonde  :: <int32> = 2;
     end;
     ```
 
@@ -218,18 +217,18 @@ But notice that when passing initargs there is no possibility of conflict so
 simply `email:` will work. This is because protobuf messages are Plain Old Data
 objects and do not inherit from other message types.
 
-To write/read a Person to/from a byte buffer or binary stream:
+To write/read a `Person` to/from a byte buffer or binary stream:
 
 ```dylan
-write-binary(person, buffer-or-stream) => (nbytes :: <integer>)
-read-binary(person, buffer-or-stream) => (nbytes :: <integer>)
+let person = decode(<person>, buffer-or-stream);
+let nbytes = encode(person, buffer-or-stream);
 ```
 
-To write/read a Person to/from a Text Format stream:
+To write/read a `Person` to/from a Text Format stream:
 
 ```dylan
-let p = read-text-format(stream, <person>);
-write-text-format(stream, p);
+let person = decode-text-format(<person>, buffer-or-stream);
+let nbytes = encode-text-format(person, stream);
 ```
 
 # TODO List
@@ -244,8 +243,6 @@ Some specific reminders to myself as I go along.
   you need to interact with a .proto that you cannot modify. "end" is a common
   example.
 
-* dylan_package option
-
 * limited types for repeated slots. First pass, add a comment about
   the type, like "// repeated int32"
 
@@ -258,6 +255,10 @@ Some specific reminders to myself as I go along.
   as not to conflict with generated class names.
 
 * strings should be utf-8. proto3 validates that in setter methods.
+
+* There's an interesting buffer implementation in cl-protobufs that allows for
+  back-patching the lengths of length-encoded elements so that making two
+  passes is unnecessary.
 
 
 # Proto2 Considerations
@@ -279,7 +280,7 @@ set. Either way, the user must treat boolean fields specially by calling
 Bit vector advantages:
 
 * generated code is the same for all field types
-* no need to use `false-or` types for any field type.
+* no need to use `false-or` types for any primitive field type.
 
 Bit vector disadvantages:
 

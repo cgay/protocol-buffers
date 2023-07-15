@@ -6,7 +6,8 @@ define library protocol-buffers
     import: { bit-vector };
   use generic-arithmetic;
   use io,
-    import: { format, format-out };
+    import: { format, format-out, streams };
+  use strings;
   use uncommon-dylan,
     import: { byte-vector,
               machine-words,
@@ -44,6 +45,8 @@ define module protocol-buffers-impl
               <integer> => <big-int> };
   use machine-words,
     import: { $machine-word-size };
+  use streams;
+  use strings;
   use uncommon-dylan;
   use uncommon-utils;
 
@@ -61,7 +64,6 @@ define module protocol-buffers-impl
     $wire-type-sgroup,
     $wire-type-egroup,
     $wire-type-varint,
-    <buffer>,
     decode-int32,
     decode-uint32,
     decode-varint,
@@ -69,6 +71,17 @@ define module protocol-buffers-impl
     encode-uint32,
     encode-varint,
     make-wire-tag,
+    read-token,
     zigzag-encode-32,
     zigzag-encode-64;
+end module;
+
+// Interface Definition Language (IDL) -- .proto file parser
+define module idl
+  use streams;
+  use strings;
+  use uncommon-dylan;
+  use uncommon-utils;
+
+  export
 end module;
