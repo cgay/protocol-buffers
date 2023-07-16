@@ -12,6 +12,7 @@ end library;
 define module protocol-buffers-test-suite
   use format,
     rename: { format-to-string => sformat }; // for brevity
+  use format-out;
   use generic-arithmetic,
     prefix: "big-",
     rename: { $maximum-integer => $maximum-big-int,

@@ -6,7 +6,7 @@ Module: protocol-buffers-impl
 // project.
 
 // All explicitly signaled errors are indirect instances of this type.
-define class <protocol-buffer-error> (<error>) end;
+define class <protocol-buffer-error> (<format-string-condition>, <error>) end;
 
 define function pb-error
     (format-string :: <string>, #rest format-args) => ()
@@ -14,3 +14,4 @@ define function pb-error
              format-string: format-string,
              format-arguments: format-args));
 end function;
+ignore(pb-error);

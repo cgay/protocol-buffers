@@ -21,11 +21,11 @@ end library;
 
 // Interface module
 define module protocol-buffers
-  // These types are subclassed by generated code.
   create
+    <protocol-buffer-error>,
     <protocol-buffer-object>,
-      <protocol-buffer-message>,
-      <protocol-buffer-enum>;
+    <protocol-buffer-message>,
+    <protocol-buffer-enum>;
 end module;
 
 // Implementation module
@@ -71,9 +71,15 @@ define module protocol-buffers-impl
     encode-uint32,
     encode-varint,
     make-wire-tag,
-    read-token,
     zigzag-encode-32,
-    zigzag-encode-64;
+    zigzag-encode-64,
+
+    <lexer>,
+    <lexer-error>,
+    <token>,
+    token-text,
+    token-value,
+    next-token;
 end module;
 
 // Interface Definition Language (IDL) -- .proto file parser
