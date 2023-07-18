@@ -6,6 +6,7 @@
         "uncommon-dylan"
     ],
     "dev-dependencies": [
+        "sphinx-extensions",
         "testworks"
     ],
     "url": "https://github.com:cgay/protocol-buffers"
