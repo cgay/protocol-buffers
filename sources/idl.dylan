@@ -100,46 +100,222 @@ define method next-token
     let char = peek-char(lex);
     if (~char)
       chars.size > 0 & finish(chars)
+    elseif (whitespace?(char))
+      if (empty?(chars))
+        consume-char(lex);
+        loop(chars)
+      else
+        finish(chars)
+      end
     else
-      case
-        whitespace?(char)
-          => if (empty?(chars))
-               consume-char(lex);
-               loop(chars)
-             else
-               finish(chars)
-             end;
-        char == '"' | char == '\''
-          => read-string-literal(lex);
-        char = '/'              // comment or AnyName
-          => begin
-               consume-char(lex);
-               if (peek-char(lex) == '/') // comment
-                 while (peek-char(lex) & peek-char(lex) ~== '\n')
-                   consume-char(lex)
-                 end;
-                 peek-char(lex) & consume-char(lex);
-                 loop(chars)
-               else
-                 finish(list(char))
-               end
-             end;
-        member?(char, "={}[]()<>;.,")
-          => if (empty?(chars))
-               consume-char(lex);
-               finish(list(char))
-             else
-               finish(chars)
-             end;
-        otherwise
-          => begin
-               consume-char(lex);
-               loop(pair(char, chars))
-             end;
-      end case
-    end if;
+      select (char)
+        '"', '\'' =>
+          read-string-literal(lex);
+        '/' =>
+          consume-char(lex);
+          if (peek-char(lex) == '/') // comment
+            read-and-discard-comment(lex); loop(chars)
+          else
+            finish(list(char))
+          end;
+        '=', '{', '}', '[', ']', '(', ')', '<', '>', ';', ',' =>
+          if (empty?(chars))
+            consume-char(lex);
+            finish(list(char))
+          else
+            finish(chars)
+          end;
+        '.' =>
+          consume-char(lex);
+          let ch = peek-char(lex);
+          if (decimal-digit?(ch))
+            read-numeric-literal(lex, char, 1, dot-seen?: #t)
+          else
+            // TODO
+            lex-error(lex, "fully-qualified names not yet implemented");
+          end;
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+          read-numeric-literal(lex, char, 1);
+        '-' =>
+          consume-char(lex);
+          read-numeric-literal(lex, peek-char(lex), -1);
+        '+' =>
+          consume-char(lex);
+          read-numeric-literal(lex, peek-char(lex), 1);
+        otherwise =>
+          if (alphabetic?(char))
+            read-ident(lex, consume-char(lex))
+          else
+            lex-error(lex, "unexpected character: %c", char);
+          end;
+      end select
+    end if
   end iterate
 end method next-token;
+
+// EBNF (but what about negatives?):
+// intLit     = decimalLit | octalLit | hexLit
+// decimalLit = ( "1" ... "9" ) { decimalDigit }
+// octalLit   = "0" { octalDigit }
+// hexLit     = "0" ( "x" | "X" ) hexDigit { hexDigit }
+//
+// floatLit = ( decimals "." [ decimals ] [ exponent ]
+//            | decimals exponent
+//            | "."decimals [ exponent ] )
+//            | "inf"
+//            | "nan"
+// decimals  = decimalDigit { decimalDigit }
+// exponent  = ( "e" | "E" ) [ "+" | "-" ] decimals
+//
+// `char` is either a decimal digit or '.' and has not been consumed.
+// `sign` is 1 or -1
+define function read-numeric-literal
+    (lex :: <lexer>, char :: <char>, sign :: <int>, #key dot-seen?)
+ => (token :: <token>)
+  let text = make(<stretchy-vector>); // full text of token.
+  let int = 0;
+  let state = iff(dot-seen?, #"fraction", #"start");
+  let frac = 0;
+  let frac-length = 0;
+  let exp = 0;
+  let exp-sign = 1;
+  local
+    method token-terminator? (ch :: false-or(<char>))
+      // Note that '.' is explicitly left out.
+      ~ch | member?(ch, " \n\r\t\f\<b>/'\";,:=-+(){}[]<>")
+    end,
+    method die (ch :: <char>, kind :: <string>)
+      lex-error(lex, "invalid character %= in %s literal", ch, kind);
+    end,
+    method octal-int-token () => (token :: <token>)
+      for (c in text)
+        let i = as(<int>, c) - as(<int>, '0');
+        i < 8 | die(c, "octal");
+        int := ash<<(int, 3) + i;
+      end;
+      make-token(lex, as(<string>, text), int * sign)
+    end,
+    method calc-decimal-int () => (i :: <int>)
+      for (c in text)
+        int := int * 10 + (as(<int>, c) - as(<int>, '0'))
+      end;
+      int := int * sign
+    end,
+    method float-token (ch) => (token :: <token>)
+      token-terminator?(ch) | die(ch, "float");
+      make-token(lex,
+                 as(<string>, text),
+                 sign * (int + as(<double-float>, frac) / (10 ^ frac-length)) * (10.0d0 ^ (exp-sign * exp)))
+    end,
+    method process-char (ch :: false-or(<char>))
+      select (state)
+        #"start" =>
+          select (ch)
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+              #f;               // Just accumulate into `text`.
+            '.' =>
+              calc-decimal-int();
+              state := #"fraction";
+            'x' =>
+              (text.size == 1 & text[0] == '0') | die(ch, "numeric");
+              state := #"hex";
+            'e', 'E' =>
+              calc-decimal-int();
+              state := #"exponent";
+            otherwise =>
+              if (text[0] == '0')
+                octal-int-token()
+              else
+                calc-decimal-int();
+                make-token(lex, as(<string>, text), int)
+              end;
+          end;
+        #"fraction" =>
+          select (ch)
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+              inc!(frac-length);
+              frac := frac * 10 + (as(<int>, ch) - as(<int>, '0'));
+            'e', 'E' =>
+              state := #"exponent";
+            otherwise =>
+              float-token(ch);
+          end;
+        #"exponent" =>
+          select (ch)
+            '-' =>
+              exp-sign := -1;
+              state := #"exponent-digits";
+            '+' =>
+              state := #"exponent-digits";
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+              exp := exp * 10 + (as(<int>, ch) - as(<int>, '0'));
+              state := #"exponent-digits";
+            otherwise =>
+              float-token(ch);
+          end;
+        #"exponent-digits" =>
+          select (ch)
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+              exp := exp * 10 + (as(<int>, ch) - as(<int>, '0'));
+            otherwise =>
+              float-token(ch);
+          end;
+        #"hex" =>
+          select (ch)
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+              int := ash<<(int, 4) + (as(<int>, ch) - as(<int>, '0'));
+            'a', 'b', 'c', 'd', 'e', 'f' =>
+              int := ash<<(int, 4) + (as(<int>, ch) - as(<int>, 'a') + 10);
+            'A', 'B', 'C', 'D', 'E', 'F' =>
+              int := ash<<(int, 4) + (as(<int>, ch) - as(<int>, 'A') + 10);
+            otherwise =>
+              token-terminator?(ch) | die(ch, "hex");
+              make-token(lex, as(<string>, text), int * sign);
+          end;
+        otherwise =>
+          lex-error(lex, "unknown state in numeric literal parser: %s", state);
+      end;
+    end method;
+  iterate loop (ch = peek-char(lex))
+    let maybe-token = process-char(ch);
+    if (instance?(maybe-token, <token>))
+      maybe-token
+    elseif (~ch)
+      lex-error(lex, "end of stream while parsing numeric literal");
+    else
+      consume-char(lex);
+      add!(text, ch);
+      loop(peek-char(lex))
+    end
+  end
+end function read-numeric-literal;
+
+// EBNF: ident = letter { letter | decimalDigit | "_" }
+//
+// `char` is the initial (already consumed) letter.
+define function read-ident
+    (lex :: <lexer>, char :: <char>) => (token :: <token>)
+  iterate loop (char = peek-char(lex), chars = list(char))
+    if (char == '_' | alphanumeric?(char))
+      consume-char(lex);
+      loop(peek-char(lex), pair(char, chars))
+    else
+      let text = as(<string>, reverse!(chars));
+      make-token(lex, text, text)
+    end
+  end
+end function;
+
+// Second slash in "//" has been peeked. Consume to end of line.
+define function read-and-discard-comment
+    (lex :: <lexer>) => ()
+  let c = peek-char(lex);
+  while (c & c ~= '\n')
+    consume-char(lex);
+    c := peek-char(lex);
+  end;
+  c & consume-char(lex);        // consume newline
+end function;
 
 // When this is called, consume-char will next return either " or '.
 // https://protobuf.dev/reference/protobuf/proto3-spec/#string_literals
@@ -225,7 +401,7 @@ define function process-escape-sequence
     '"' => values('"', pair(char, token-chars));
     otherwise =>
       if (~octal-digit?(char))
-        lex-error(lex, "unrecognized escape character in string literal: %c", char);
+        lex-error(lex, "unrecognized escape character in string literal: %=", char);
       else
         // up to three octal dicits
         let code = ord(char) - ord('0');
@@ -246,6 +422,7 @@ define function process-escape-sequence
   end select
 end function;
 
+// EBNF:
 // unicodeEscape = '\' "u" hexDigit hexDigit hexDigit hexDigit
 // unicodeLongEscape = '\' "U" ( "000" hexDigit hexDigit hexDigit hexDigit hexDigit |
 //                               "0010" hexDigit hexDigit hexDigit hexDigit
@@ -258,7 +435,7 @@ define function process-unicode-escape
   local method consume-hex-char () => (c :: <char>)
           let ch = peek-char(lex);
           if (ch & ~hexadecimal-digit?(ch))
-            lex-error(lex, "invalid character in unicode escape: %c", ch);
+            lex-error(lex, "invalid character in unicode escape: %=", ch);
           end;
           consume-char(lex);    // signal EOF if ch is #f
           ch
