@@ -1,182 +1,214 @@
-Module: google-protobuf
+Module: protocol-buffers-impl
 
 // This file implements by hand what we eventually expect to be able to generate for
 // https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto
-// with a Dylan protoc plugin. It also functions as a way to brainstorm what the
+// with the Dylan pbgen tool. It also functions as a way to brainstorm what the
 // generated Dylan code should look like. That includes how the code should be formatted
 // by the protoc plugin, which may not exactly match the usual Dylan style.
 
-/*
-TODO:
+// This code reflects the fact that descriptior.proto uses proto2 syntax:
+// * Optional and repeated fields are typed false-or(<foo>)
+// * Required fields are typed <foo>, do not have an initial value, and
+//   have a required-init-keyword:.
 
-* GENERIC FUNCTIONS -- Do we want explicit generic functions? There will be some
-  interesting issues. Assuming everything in the generated module is sealed, gfs won't
-  actually buy us much, right? Do they improve compiler warnings when using the generated
-  module in another library?
+// End of line comments in the .proto file are placed at the end of the slot
+// name line. Comments on lines by themselves are placed on a line by
+// themselves in the Dylan code.
 
-  It means tracking the signatures of message field accessors to decide how to write the
-  gf, depending on the number of methods and their types. A bit complex. Probably not
-  worth the effort for quite a while.
-
-* LIMITED TYPES -- Repeated slots could be represented by limited(<stretchy-vector>, of:
-  whatever), however, I think this would cause problems for initialization because you
-  can't just say
-    make(<my-message>, things: vector(a, b))
-  you would have to say
-    make(<my-message>, things: as(<thing-vector>, vector(a, b)))
-  instead. We can wait on this.
-
-* RESERVED WORDS -- A slot named "end" is a problem. Is there a good way to solve this
-  other than to use the class name as a prefix for all slots?
-
-*/
+// Each repeated field slot is followed by a generated comment of the form
+// "(repeated <type>)" since Dylan limited collections are difficult to work
+// with. We may revisit this later.
 
 
 // FileDescriptorSet
 // The protocol compiler can output a FileDescriptorSet containing the .proto
 // files it parses.
-define sealed class <file-descriptor-set> (pb/<message>)
+define sealed class <file-descriptor-set> (<message>)
   // The protocol compiler can output a FileDescriptorSet containing the .proto
   // files it parses.
-  slot file-descriptor-set-file :: <sequence> = make(<stretchy-vector>),
+  slot file-descriptor-set-file :: false-or(<sequence>),
+    init-value: #f,
     init-keyword: file:;
 end class <file-descriptor-set>;
 
 // FileDescriptorProto
 // Describes a complete .proto file.
-define class <file-descriptor-proto> (pb/<message>)
-  slot file-descriptor-proto-name :: <string> = "",     // file name, relative to root of source tree
-    init-keyword: name:;          // e.g. "foo", "foo.bar", etc.
-  slot file-descriptor-proto-package :: <string> = "",
+define class <file-descriptor-proto> (<message>)
+  slot file-descriptor-proto-name :: false-or(<string>), // file name, relative to root of source tree
+    init-value: #f,
+    init-keyword: name:;
+  slot file-descriptor-proto-package :: false-or(<string>), // e.g. "foo", "foo.bar", etc.
+    init-value: #f,
     init-keyword: package:;
   // Names of files imported by this file.
-  slot file-descriptor-proto-dependency :: <sequence> = make(<stretchy-vector>), // repeated string
+  slot file-descriptor-proto-dependency :: false-or(<sequence>), // repeated string
+    init-value: #f,
     init-keyword: dependency:;
   // Indexes of the public imported files in the dependency list above.
-  slot file-descriptor-proto-public-dependency :: <sequence> = make(<stretchy-vector>), // repeated int32
+  slot file-descriptor-proto-public-dependency :: false-or(<sequence>), // repeated int32
+    init-value: #f,
     init-keyword: public-dependency:;
   // Indexes of the weak imported files in the dependency list.
   // For Google-internal migration only. Do not use.
-  slot file-descriptor-proto-weak-dependency :: <sequence> = make(<stretchy-vector>), // repeated int32
+  slot file-descriptor-proto-weak-dependency :: false-or(<sequence>), // repeated int32
+    init-value: #f,
     init-keyword: weak-dependency:;
   // All top-level definitions in this file.
-  slot file-descriptor-proto-message-type :: <sequence> = make(<stretchy-vector>), // repeated <descriptor-proto>
+  slot file-descriptor-proto-message-type :: false-or(<sequence>), // repeated <descriptor-proto>
+    init-value: #f,
     init-keyword: message-type:;
-  slot file-descriptor-proto-enum-type :: <sequence> = make(<stretchy-vector>), // repeated <enum-descriptor-proto>
+  slot file-descriptor-proto-enum-type :: false-or(<sequence>), // repeated <enum-descriptor-proto>
+    init-value: #f,
     init-keyword: enum-type:;
-  slot file-descriptor-proto-service :: <sequence> = make(<stretchy-vector>), // repeated <service-descriptor-proto>
+  slot file-descriptor-proto-service :: false-or(<sequence>), // repeated <service-descriptor-proto>
+    init-value: #f,
     init-keyword: service:;
-  slot file-descriptor-proto-extension :: <sequence> = make(<stretchy-vector>), // repeated <field-descriptor-proto>
+  slot file-descriptor-proto-extension :: false-or(<sequence>), // repeated <field-descriptor-proto>
+    init-value: #f,
     init-keyword: extension:;
-  slot file-descriptor-proto-options :: false-or(<file-options>) = #f,
+  slot file-descriptor-proto-options :: false-or(<file-options>),
+    init-value: #f,
     init-keyword: options:;
   // This field contains optional information about the original source code.
   // You may safely remove this entire field without harming runtime
   // functionality of the descriptors -- the information is needed only by
   // development tools.
-  slot file-descriptor-proto-source-code-info :: false-or(<source-code-info>) = #f,
+  slot file-descriptor-proto-source-code-info :: false-or(<source-code-info>),
+    init-value: #f,
     init-keyword: source-code-info:;
   // The syntax of the proto file.
-  // The supported values are "proto2" and "proto3".
-  slot file-descriptor-proto-syntax :: <string> = "",
+  // The supported values are "proto2", "proto3", and "editions".
+  slot file-descriptor-proto-syntax :: false-or(<string>),
+    init-value: #f,
     init-keyword: syntax:;
+  // The edition of the proto file, which is an opaque string.
+  slot file-descriptor-proto-edition :: false-or(<string>),
+    init-value: #f,
+    init-keyword: edition:;
 end class <file-descriptor-proto>;
 
 // DescriptorProto
 // Describes a message type.
-define sealed class <descriptor-proto> (pb/<message>)
-  slot descriptor-proto-name :: <string> = "",
+define sealed class <descriptor-proto> (<message>)
+  slot descriptor-proto-name :: false-or(<string>),
+    init-value: #f,
     init-keyword: name:;
-  slot descriptor-proto-field :: <sequence> = make(<stretchy-vector>), // repeated <field-descriptor-proto>
+  slot descriptor-proto-field :: false-or(<sequence>), // repeated <field-descriptor-proto>
+    init-value: #f,
     init-keyword: field:;
-  slot descriptor-proto-extension :: <sequence> = make(<stretchy-vector>), // repeated <field-descriptor-proto>
+  slot descriptor-proto-extension :: false-or(<sequence>), // repeated <field-descriptor-proto>
+    init-value: #f,
     init-keyword: extension:;
-  slot descriptor-proto-nested-type :: <sequence> = make(<stretchy-vector>), // repeated <descriptor-proto>
+  slot descriptor-proto-nested-type :: false-or(<sequence>), // repeated <descriptor-proto>
+    init-value: #f,
     init-keyword: nested-type:;
-  slot descriptor-proto-enum-type :: <sequence> = make(<stretchy-vector>), // repeated <enum-descriptor-proto>
+  slot descriptor-proto-enum-type :: false-or(<sequence>), // repeated <enum-descriptor-proto>
+    init-value: #f,
     init-keyword: enum-type:;
-  slot descriptor-proto-extension-range :: <sequence> = make(<stretchy-vector>), // repeated <descriptor-proto-extension-range>
+  slot descriptor-proto-extension-range :: false-or(<sequence>), // repeated <descriptor-proto-extension-range>
+    init-value: #f,
     init-keyword: extension-range:;
-  slot descriptor-proto-oneof-decl :: <sequence> = make(<stretchy-vector>), // repeated <oneof-descriptor-proto>
+  slot descriptor-proto-oneof-decl :: false-or(<sequence>), // repeated <oneof-descriptor-proto>
+    init-value: #f,
     init-keyword: oneof-decl:;
-  slot descriptor-proto-options :: <message-options> = make(<stretchy-vector>),
+  slot descriptor-proto-options :: false-or(<message-options>),
+    init-value: #f,
     init-keyword: options:;
-  slot descriptor-proto-reserved-range :: <sequence> = make(<stretchy-vector>), // repeated <descriptor-proto-reserved-range>
+  slot descriptor-proto-reserved-range :: false-or(<sequence>), // repeated <descriptor-proto-reserved-range>
+    init-value: #f,
     init-keyword: reserved-range:;
-  slot descriptor-proto-reserved-name :: <sequence> = make(<stretchy-vector>), // repeated <string>
+  slot descriptor-proto-reserved-name :: false-or(<sequence>), // repeated <string>
+    init-value: #f,
+    init-keyword: reserved-name:;
 end class <descriptor-proto>;
 
 // DescriptorProto.ExtensionRange
-define sealed class <descriptor-proto-extension-range> (pb/<message>)
-  slot descriptor-proto-extension-range-start :: <int32>,        // Inclusive.
+define sealed class <descriptor-proto-extension-range> (<message>)
+  slot descriptor-proto-extension-range-start :: false-or(<int32>), // Inclusive.
+    init-value: #f,
     init-keyword: start:;
-  slot descriptor-proto-extension-range-end :: <int32>,          // Exclusive.
+  slot descriptor-proto-extension-range-end :: false-or(<int32>), // Exclusive.
+    init-value: #f,
     init-keyword: end:;
-  slot descriptor-proto-extension-range-options :: false-or(<extenstion-range-options>) = #f,
+  slot descriptor-proto-extension-range-options :: false-or(<extension-range-options>),
+    init-value: #f,
     init-keyword: options:;
 end class <descriptor-proto-extension-range>;
 
 // DescriptorProto.ReservedRange
-define sealed class <descriptor-proto-reserved-range> (pb/<message>)
-  slot descriptor-proto-reserved-range-start :: <int32>,
+define sealed class <descriptor-proto-reserved-range> (<message>)
+  slot descriptor-proto-reserved-range-start :: false-or(<int32>),
+    init-value: #f,
     init-keyword: start:;
-  slot descriptor-proto-reserved-range-end :: <int32>,
+  slot descriptor-proto-reserved-range-end :: false-or(<int32>),
+    init-value: #f,
     init-keyword: end:;
-end class;
+end class <descriptor-proto-reserved-range>;
 
 // ExtensionRangeOptions
-define sealed class <extension-range-options> (pb/<message>)
+define sealed class <extension-range-options> (<message>)
   // The parser stores options it doesn't recognize here. See above.
-  slot extension-range-options-uninterpreted-option :: <sequence> = make(<stretchy-vector>),
+  slot extension-range-options-uninterpreted-option :: false-or(<sequence>),
+    init-value: #f,
     init-keyword: uninterpreted-option:;
-  // TODO:
+  // TODO: Do we need to do anything for this?
   // Clients can define custom options in extensions of this message. See above.
   //extensions 1000 to max;
 end class <extension-range-options>;
 
-// Describes a field within a message.
 // FieldDescriptorProto
-define sealed class <field-descriptor-proto> (pb/<message>)
-  slot field-descriptor-proto-name :: <string> = "",
+// Describes a field within a message.
+define sealed class <field-descriptor-proto> (<message>)
+  slot field-descriptor-proto-name :: false-or(<string>),
+    init-value: #f,
     init-keyword: name:;
-end; // TODO: I STOPPED HERE
-/*
-  slot number :: <int32> = ;
-  optional Label label = 4;
-
+  slot field-descriptor-proto-number :: false-or(<int32>),
+    init-value: #f,
+    init-keyword: number:;
+  slot field-descriptor-proto-label :: false-or(<field-descriptor-proto-label>),
+    init-value: #f,
+    init-keyword: label:;
   // If type_name is set, this need not be set.  If both this and type_name
   // are set, this must be one of TYPE_ENUM, TYPE_MESSAGE or TYPE_GROUP.
-  optional Type type = 5;
-
+  slot field-descriptor-proto-type :: false-or(<field-descriptor-proto-type>),
+    init-value: #f,
+    init-keyword: type:;
   // For message and enum types, this is the name of the type.  If the name
   // starts with a '.', it is fully-qualified.  Otherwise, C++-like scoping
   // rules are used to find the type (i.e. first the nested types within this
   // message are searched, then within the parent, on up to the root
   // namespace).
-  optional string type_name = 6;
-
+  slot field-descriptor-proto-type-name :: false-or(<string>),
+    init-value: #f,
+    init-keyword: type-name:;
   // For extensions, this is the name of the type being extended.  It is
   // resolved in the same manner as type_name.
-  optional string extendee = 2;
-
+  slot field-descriptor-proto-extendee :: false-or(<string>),
+    init-value: #f,
+    init-keyword: extendee:;
   // For numeric types, contains the original text representation of the value.
   // For booleans, "true" or "false".
   // For strings, contains the default text contents (not escaped in any way).
   // For bytes, contains the C escaped value.  All bytes >= 128 are escaped.
-  // TODO(kenton):  Base-64 encode?
-  optional string default_value = 7;
-
+  slot field-descriptor-proto-default-value :: false-or(<string>),
+    init-value: #f,
+    init-keyword: default-value:;
   // If set, gives the index of a oneof in the containing type's oneof_decl
   // list.  This field is a member of that oneof.
-  optional int32 oneof_index = 9;
-
+  slot field-descriptor-proto-oneof-index :: false-or(<int32>),
+    init-value: #f,
+    init-keyword: oneof-index:;
   // JSON name of this field. The value is set by protocol compiler. If the
   // user has set a "json_name" option on this field, that option's value
   // will be used. Otherwise, it's deduced from the field's name by converting
   // it to camelCase.
-  optional string json_name = 10;
+  slot field-descriptor-proto-json-name :: false-or(<string>),
+    init-value: #f,
+    init-keyword: json-name:;
 
-  optional FieldOptions options = 8;
+  slot field-descriptior-proto-options :: false-or(<FieldOptions>),
+    init-value: #f,
+    init-keyword: options:;
 
   // If true, this is a proto3 "optional". When a proto3 field is optional, it
   // tracks presence regardless of field type.
@@ -199,93 +231,116 @@ end; // TODO: I STOPPED HERE
   //
   // Proto2 optional fields do not set this flag, because they already indicate
   // optional with `LABEL_OPTIONAL`.
-  optional bool proto3_optional = 17;
-}
+  slot field-descriptior-proto-proto3-optional :: false-or(<bool>),
+    init-value: #f,
+    init-keyword: proto3-optional:;
+end class <field-descriptor-proto>;
 
-define enum <field-descriptor-proto-type> (pb/<enum>)
+define enum <field-descriptor-proto-type> (<enum>)
   // 0 is reserved for errors.
   // Order is weird for historical reasons.
-  $field-descriptor-proto-type-type-double;
-  $field-descriptor-proto-type-type-float;
+  $field-descriptor-proto-type-type-double = 1;
+  $field-descriptor-proto-type-type-float  = 2;
   // Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT64 if
   // negative values are likely.
-  $field-descriptor-proto-type-type-int64;
-  $field-descriptor-proto-type-type-uint64;
+  $field-descriptor-proto-type-type-int64  = 3;
+  $field-descriptor-proto-type-type-uint64 = 4;
   // Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT32 if
   // negative values are likely.
-  $field-descriptor-proto-type-type-int32;
-  $field-descriptor-proto-type-type-fixed64;
-  $field-descriptor-proto-type-type-fixed32;
-  $field-descriptor-proto-type-type-bool;
-  $field-descriptor-proto-type-type-string;
+  $field-descriptor-proto-type-type-int32   = 5;
+  $field-descriptor-proto-type-type-fixed64 = 6;
+  $field-descriptor-proto-type-type-fixed32 = 7;
+  $field-descriptor-proto-type-type-bool    = 8;
+  $field-descriptor-proto-type-type-string  = 9;
   // Tag-delimited aggregate.
   // Group type is deprecated and not supported in proto3. However, Proto3
   // implementations should still be able to parse the group wire format and
   // treat group fields as unknown fields.
-  $field-descriptor-proto-type-type-group;
-  $field-descriptor-proto-type-type-message;  // Length-delimited aggregate.
+  $field-descriptor-proto-type-type-group   = 10;
+  $field-descriptor-proto-type-type-message = 11;  // Length-delimited aggregate.
 
   // New in version 2.
-  $field-descriptor-proto-type-type-bytes;
-  $field-descriptor-proto-type-type-uint32;
-  $field-descriptor-proto-type-type-enum;
-  $field-descriptor-proto-type-type-sfixed32;
-  $field-descriptor-proto-type-type-sfixed64;
-  $field-descriptor-proto-type-type-sint32;  // Uses ZigZag encoding.
-  $field-descriptor-proto-type-type-sint64;  // Uses ZigZag encoding.
+  $field-descriptor-proto-type-type-bytes  = 12;
+  $field-descriptor-proto-type-type-uint32 = 13;
+  $field-descriptor-proto-type-type-enum   = 14;
+  $field-descriptor-proto-type-type-sfixed32 = 15;
+  $field-descriptor-proto-type-type-sfixed64 = 16;
+  $field-descriptor-proto-type-type-sint32   = 17;  // Uses ZigZag encoding.
+  $field-descriptor-proto-type-type-sint64   = 18;  // Uses ZigZag encoding.
 end enum;
 
-define enum <field-descriptor-proto-label> (pb/<enum>)
+define enum <field-descriptor-proto-label> (<enum>)
   // 0 is reserved for errors
-  $field-descriptor-proto-label-label-optional;
-  $field-descriptor-proto-label-label-required;
-  $field-descriptor-proto-label-label-repeated;
+  $field-descriptor-proto-label-label-optional = 1;
+  $field-descriptor-proto-label-label-required = 2;
+  $field-descriptor-proto-label-label-repeated = 3;
 end enum;
-
-/* TODO:
 
 // Describes a oneof.
-message OneofDescriptorProto {
-  optional string name = 1;
-  optional OneofOptions options = 2;
-}
+define class <oneof-descriptor-proto> (<message>)
+  slot oneof-descriptior-proto-name :: false-or(<string>),
+    init-value: #f,
+    init-keyword: name:;
+  slot oneof-descriptior-proto-options :: false-or(<OneofOptions>),
+    init-value: #f,
+    init-keyword: options:;
+end class <oneof-descriptor-proto>;
 
 // Describes an enum type.
-message EnumDescriptorProto {
-  optional string name = 1;
+define class <enum-descriptor-proto> (<message>)
+  slot enum-descriptior-proto-name :: false-or(<string>),
+    init-value: #f,
+    init-keyword: name:;
 
-  repeated EnumValueDescriptorProto value = 2;
+  slot enum-descriptior-proto-value :: false-or(<sequence>), // repeated EnumValueDescriptorProto
+    init-value: #f,
+    init-keyword: value:;
 
-  optional EnumOptions options = 3;
-
-  // Range of reserved numeric values. Reserved values may not be used by
-  // entries in the same enum. Reserved ranges may not overlap.
-  //
-  // Note that this is distinct from DescriptorProto.ReservedRange in that it
-  // is inclusive such that it can appropriately represent the entire int32
-  // domain.
-  message EnumReservedRange {
-    optional int32 start = 1;  // Inclusive.
-    optional int32 end = 2;    // Inclusive.
-  }
+  slot enum-descriptior-proto-options :: false-or(<sequence>), // repeated EnumOptions
+    init-value: #f,
+    init-keyword: options:;
 
   // Range of reserved numeric values. Reserved numeric values may not be used
   // by enum values in the same enum declaration. Reserved ranges may not
   // overlap.
-  repeated EnumReservedRange reserved_range = 4;
+  //
+  // Note that this is distinct from DescriptorProto.ReservedRange in that it
+  // is inclusive such that it can appropriately represent the entire int32
+  // domain.
+  slot enum-descriptior-proto-reserved-range :: false-or(<sequence>), // repeated <enum-descriptor-proto-enum-reserved-range>
+    init-value: #f,
+    init-keyword: reserved-range:;
 
   // Reserved enum value names, which may not be reused. A given name may only
   // be reserved once.
-  repeated string reserved_name = 5;
-}
+  slot enum-descriptior-proto-reserved-name :: false-or(<string>),
+    init-value: #f,
+    init-keyword: reserved-name:;
+end class <enum-descriptor-proto>;
+
+// EnumDescriptorProto.EnumReservedRange
+define class <enum-descriptor-proto-enum-reserved-range> (<message>)
+  slot enum-descriptior-proto-enum-reserved-range-start :: false-or(<int32>),
+    init-value: #f,
+    init-keyword: start:;       // Inclusive.
+  slot enum-descriptior-proto-enum-reserved-range-end :: false-or(<int32>),
+    init-value: #f,
+    init-keyword: end:;         // Inclusive.
+end class <enum-descriptor-proto-enum-reserved-range>;
 
 // Describes a value within an enum.
-message EnumValueDescriptorProto {
-  optional string name = 1;
-  optional int32 number = 2;
+define class <enum-value-descriptor-proto> (<message>)
+  slot enum-value-descriptior-proto-name :: false-or(<string>),
+    init-value: #f,
+    init-keyword: name:;
+  slot enum-value-descriptior-proto-number :: false-or(<int32>),
+    init-value: #f,
+    init-keyword: number:;
 
-  optional EnumValueOptions options = 3;
-}
+  slot field-descriptior-proto-options :: false-or(<enum-value-options>),
+    init-value: #f,
+    init-keyword: options:;
+end class <enum-value-descriptor-proto>;
 
 // Describes a service.
 message ServiceDescriptorProto {
