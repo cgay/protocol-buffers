@@ -50,7 +50,6 @@ define module protocol-buffers-impl
   use uncommon-dylan;
   use uncommon-utils;
 
-  // For the test suite
   export
     $max-int32,
     $max-int64,
@@ -79,7 +78,9 @@ define module protocol-buffers-impl
     <token>,
     token-text,
     token-value,
-    next-token;
+    next-token,
+
+    camel-to-kebob;
 end module;
 
 // Interface Definition Language (IDL) -- .proto file parser
