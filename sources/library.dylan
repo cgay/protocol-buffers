@@ -6,7 +6,7 @@ define library protocol-buffers
     import: { bit-vector };
   use generic-arithmetic;
   use io,
-    import: { format, format-out, streams };
+    import: { format, format-out, print, streams };
   use strings;
   use uncommon-dylan,
     import: { byte-vector,
@@ -45,6 +45,7 @@ define module protocol-buffers-impl
               <integer> => <big-int> };
   use machine-words,
     import: { $machine-word-size };
+  use print;                    // print[ing]-object
   use streams;
   use strings;
   use uncommon-dylan;
@@ -76,9 +77,17 @@ define module protocol-buffers-impl
     <lexer>,
     <lexer-error>,
     <token>,
+    <punctuation-token>,
+    <reserved-word-token>,
+    <identifier-token>,
+    <number-token>,
+    <string-token>,
+    <boolean-token>,
+    <comment-token>,
+    <whitespace-token>,
     token-text,
     token-value,
-    next-token,
+    read-token,
 
     camel-to-kebob;
 end module;

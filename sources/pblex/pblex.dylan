@@ -17,7 +17,7 @@ define function main
         if (~token)
           exit()
         end;
-        format-out("%s: %=\n", token.token-text, token.token-value);
+        format-out("%s\n", token);
         force-out();
       end;
     end;

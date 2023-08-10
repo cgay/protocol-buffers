@@ -1,17 +1,66 @@
 Module: protocol-buffers-impl
 Synopsis: Ad-hoc, recursive descent parser for .proto Interface Definition Language
 
+// References used while writing this parser:
+// * https://protobuf.dev/reference/protobuf/proto2-spec/
+// * https://protobuf.dev/reference/protobuf/proto3-spec/
+// * https://protobuf.com/docs/language-spec#character-classes
+// * https://github.com/bufbuild/protocompile/blob/main/parser/
+
 
 define class <token> (<object>)
-  constant slot token-text   :: <string>, required-init-keyword: text:;
-  constant slot token-value  :: <object>, required-init-keyword: value:;
-  constant slot token-line   :: <int>,    required-init-keyword: line:;
-  constant slot token-column :: <int>,    required-init-keyword: column:;
+  constant slot token-text  :: <string>, required-init-keyword: text:;
+  constant slot token-value :: <object>, required-init-keyword: value:;
 end class;
-ignore(token-text, token-value, token-line, token-column);
+ignore(token-text, token-value);
+
+define method print-object
+    (token :: <token>, stream :: <stream>) => ()
+  printing-object (token, stream)
+    format(stream, "text: %=, value: %=", token.token-text, token.token-value)
+  end;
+end method;
+
+define class <punctuation-token>   (<token>) end; // {, }, =, etc.
+define class <reserved-word-token> (<token>) end;
+define class <identifier-token>    (<token>) end;
+define class <number-token>        (<token>) end;
+define class <string-token>        (<token>) end;
+define class <boolean-token>       (<token>) end;
+define class <comment-token>       (<token>) end;
+define class <whitespace-token>    (<token>) end;
+
+
+define constant $reserved-words
+  = #["bool", "bytes", "double", "enum", "extend", "extensions", "fixed32", "fixed64",
+      "float", "group", "import", "inf", "int32", "int64", "map", "max", "message",
+      "oneof", "option", "optional", "package", "public", "repeated", "required",
+      "reserved", "returns", "rpc", "service", "sfixed32", "sfixed64", "sint32",
+      "sint64", "stream", "string", "syntax", "to", "uint32", "uint64", "weak"];
+
+define constant $well-known-tokens :: <string-table>
+  = begin
+      let t = make(<string-table>);
+      for (c in ";,.:=(){}[]<>/")
+        let text = make(<string>, size: 1, fill: c);
+        t[text] := make(<punctuation-token>, text: text, value: c);
+      end;
+      for (text in $reserved-words)
+        t[text] := make(<reserved-word-token>,
+                        text: text,
+                        value: as(<symbol>, text));
+      end;
+      t["true"] := make(<boolean-token>, text: "true", value: #t);
+      t["false"] := make(<boolean-token>, text: "false", value: #f);
+      t["nan"] := make(<number-token>, text: "nan", value: 0.0d0 / 0.0d0);
+      t["inf"] := make(<number-token>, text: "nan", value: 1.0d0 / 0.0d0);
+      // see read-numeric-literal
+      t["-inf"] := make(<number-token>, text: "nan", value: -1.0d0 / 0.0d0);
+      t
+    end;
 
 define class <lexer> (<object>)
-  slot lexer-line :: <int> = 0;
+  slot lexer-line :: <int> = 1;
   slot lexer-column :: <int> = 0;
   constant slot lexer-stream :: <stream>, required-init-keyword: stream:;
   // This is optional and solely for use in error messages.
@@ -19,7 +68,7 @@ define class <lexer> (<object>)
   constant slot lexer-file :: <string> = "<stream>", init-keyword: file:;
 end class;
 
-define generic next-token
+define generic read-token
   (lex :: <lexer>) => (token :: false-or(<token>));
 
 define generic peek-char
@@ -28,9 +77,8 @@ define generic peek-char
 define generic consume-char
   (lex :: <lexer>) => (char :: false-or(<char>));
 
-define generic make-token
-    (lex :: <lexer>, text :: <string>, value :: <object>)
- => (token :: <token>);
+define generic expect
+  (lex :: <lexer>, text :: <string>) => ();
 
 
 define class <lexer-error> (<protocol-buffer-error>) end;
@@ -43,16 +91,6 @@ define function lex-error
               format-arguments: concat(location-args, args)))
 end function;
 
-
-define method make-token
-    (lex :: <lexer>, text :: <string>, value :: <object>)
- => (token :: <token>)
-  make(<token>,
-       text: text,
-       value: value,
-       line: lex.lexer-line,
-       column: lex.lexer-column)
-end method;
 
 define method peek-char (lex :: <lexer>) => (char :: false-or(<char>))
   peek(lex.lexer-stream, on-end-of-stream: #f)
@@ -68,6 +106,17 @@ define method consume-char (lex :: <lexer>) => (char :: false-or(<char>))
   end;
   ch
 end method;
+
+define method expect
+    (lex :: <lexer>, text :: <string>) => ()
+  for (c in text)
+    let p = peek-char(lex);
+    p | lex-error(lex, "end of stream encountered but was expecting %=", text);
+    c == p | lex-error(lex, "expected %= (part of %=) but got %=", c, text, p);
+    consume-char(lex);
+  end;
+end method;
+
 
 // Should probably get rid of this but I want the brevity during development.
 define inline function ord (c :: <char>) => (i :: <int>)
@@ -90,49 +139,40 @@ end function;
 // TODO: the spec isn't clear about such things as whether there must be
 // whitespace between an identifier and a string, so for example is `import
 // public"a.b.c";` valid? We'll just have to do what protoc does in such cases.
-define method next-token
+define method read-token
     (lex :: <lexer>) => (token :: false-or(<token>))
-  local method finish (chars) => (token :: <token>)
+  local method finish (chars, token-class) => (token :: <token>)
           let text = as(<string>, reverse!(chars));
-          make-token(lex, text, text) // the text is the value for most tokens
+          element($well-known-tokens, text, default: #f)
+            | make(token-class, text: text, value: text)
         end;
   iterate loop (chars = #())
     let char = peek-char(lex);
     if (~char)
-      chars.size > 0 & finish(chars)
-    elseif (whitespace?(char))
-      if (empty?(chars))
-        consume-char(lex);
-        loop(chars)
-      else
-        finish(chars)
-      end
+      // End of stream. It's possible for the token type to be incorrect here,
+      // but since only '}', ';', and whitespace are valid before EOF it will
+      // only happen if the file is invalid anyway.
+      chars.size > 0 & finish(chars, <whitespace-token>)
     else
       select (char)
+        ' ', '\n', '\r', '\t', '\f', '\<0B>' =>
+          read-whitespace(lex);
+        '/' =>
+          read-comment(lex);
         '"', '\'' =>
           read-string-literal(lex);
-        '/' =>
+        '=', '{', '}', '[', ']', '(', ')', '<', '>', ':', ';', ',' =>
           consume-char(lex);
-          if (peek-char(lex) == '/') // comment
-            read-and-discard-comment(lex); loop(chars)
-          else
-            finish(list(char))
-          end;
-        '=', '{', '}', '[', ']', '(', ')', '<', '>', ';', ',' =>
-          if (empty?(chars))
-            consume-char(lex);
-            finish(list(char))
-          else
-            finish(chars)
-          end;
+          // (Could avoid making a string here.)
+          let text = make(<string>, size: 1, fill: char);
+          $well-known-tokens[text];
         '.' =>
           consume-char(lex);
           let ch = peek-char(lex);
           if (decimal-digit?(ch))
             read-numeric-literal(lex, char, 1, dot-seen?: #t)
           else
-            // TODO
-            lex-error(lex, "fully-qualified names not yet implemented");
+            $well-known-tokens["."]
           end;
         '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
           read-numeric-literal(lex, char, 1);
@@ -143,15 +183,29 @@ define method next-token
           consume-char(lex);
           read-numeric-literal(lex, peek-char(lex), 1);
         otherwise =>
-          if (alphabetic?(char))
-            read-ident(lex, consume-char(lex))
+          // According to the spec, identifiers must start with a letter, but
+          // unit tests in Google's protobuf repo assume that leading
+          // underscore is valid so...
+          if (char == '_' | alphabetic?(char))
+            read-identifier-or-reserved-word(lex)
           else
             lex-error(lex, "unexpected character: %c", char);
           end;
       end select
     end if
   end iterate
-end method next-token;
+end method read-token;
+
+define function read-whitespace (lex :: <lexer>) => (token :: <whitespace-token>)
+  // (We might want to optimize the single space case.)
+  let whitespace = make(<stretchy-vector>);
+  for (c = peek-char(lex) then peek-char(lex),
+       while: c & whitespace?(c))
+    add!(whitespace, consume-char(lex))
+  end;
+  let text = as(<string>, whitespace);
+  make(<whitespace-token>, text: text, value: text)
+end function;
 
 // EBNF (but what about negatives?):
 // intLit     = decimalLit | octalLit | hexLit
@@ -169,6 +223,8 @@ end method next-token;
 //
 // `char` is either a decimal digit or '.' and has not been consumed.
 // `sign` is 1 or -1
+// Note that "nan" and "inf" are handled via $well-known-tokens but
+// "-inf" is handled here.
 define function read-numeric-literal
     (lex :: <lexer>, char :: <char>, sign :: <int>, #key dot-seen?)
  => (token :: <token>)
@@ -181,8 +237,7 @@ define function read-numeric-literal
   let exp-sign = 1;
   local
     method token-terminator? (ch :: false-or(<char>))
-      // Note that '.' is explicitly left out.
-      ~ch | member?(ch, " \n\r\t\f\<b>/'\";,:=-+(){}[]<>")
+      ~ch | member?(ch, " \n\r\t\f\<0B>/'\";,:=-+(){}[]<>") // do not include '.'
     end,
     method die (ch :: <char>, kind :: <string>)
       lex-error(lex, "invalid character %= in %s literal", ch, kind);
@@ -193,7 +248,7 @@ define function read-numeric-literal
         i < 8 | die(c, "octal");
         int := ash<<(int, 3) + i;
       end;
-      make-token(lex, as(<string>, text), int * sign)
+      make(<number-token>, text: as(<string>, text), value: int * sign)
     end,
     method calc-decimal-int () => (i :: <int>)
       for (c in text)
@@ -203,9 +258,9 @@ define function read-numeric-literal
     end,
     method float-token (ch) => (token :: <token>)
       token-terminator?(ch) | die(ch, "float");
-      make-token(lex,
-                 as(<string>, text),
-                 sign * (int + as(<double-float>, frac) / (10 ^ frac-length)) * (10.0d0 ^ (exp-sign * exp)))
+      make(<number-token>,
+           text: as(<string>, text),
+           value: sign * (int + as(<double-float>, frac) / (10 ^ frac-length)) * (10.0d0 ^ (exp-sign * exp)))
     end,
     method process-char (ch :: false-or(<char>))
       select (state)
@@ -222,12 +277,16 @@ define function read-numeric-literal
             'e', 'E' =>
               calc-decimal-int();
               state := #"exponent";
+            'i' =>
+              assert(sign == -1);
+              expect(lex, "inf");
+              $well-known-tokens["-inf"];
             otherwise =>
               if (text[0] == '0')
                 octal-int-token()
               else
                 calc-decimal-int();
-                make-token(lex, as(<string>, text), int)
+                make(<number-token>, text: as(<string>, text), value: int)
               end;
           end;
         #"fraction" =>
@@ -270,7 +329,7 @@ define function read-numeric-literal
               int := ash<<(int, 4) + (as(<int>, ch) - as(<int>, 'A') + 10);
             otherwise =>
               token-terminator?(ch) | die(ch, "hex");
-              make-token(lex, as(<string>, text), int * sign);
+              make(<number-token>, text: as(<string>, text), value: int * sign);
           end;
         otherwise =>
           lex-error(lex, "unknown state in numeric literal parser: %s", state);
@@ -291,30 +350,50 @@ define function read-numeric-literal
 end function read-numeric-literal;
 
 // EBNF: ident = letter { letter | decimalDigit | "_" }
-//
-// `char` is the initial (already consumed) letter.
-define function read-ident
-    (lex :: <lexer>, char :: <char>) => (token :: <token>)
-  iterate loop (char = peek-char(lex), chars = list(char))
-    if (char == '_' | alphanumeric?(char))
-      consume-char(lex);
-      loop(peek-char(lex), pair(char, chars))
-    else
-      let text = as(<string>, reverse!(chars));
-      make-token(lex, text, text)
-    end
-  end
+define function read-identifier-or-reserved-word (lex :: <lexer>) => (token :: <token>)
+  // Caller already confirmed the peeked char is a letter.
+  let identifier = make(<stretchy-vector>);
+  iterate loop (ch = peek-char(lex))
+    if (ch & (ch == '_' | alphanumeric?(ch)))
+      add!(identifier, consume-char(lex));
+      loop(peek-char(lex))
+    end;
+  end;
+  let text = as(<string>, identifier);
+  element($well-known-tokens, text, default: #f)
+    | make(<identifier-token>, text: text, value: text)
 end function;
 
-// Second slash in "//" has been peeked. Consume to end of line.
-define function read-and-discard-comment
-    (lex :: <lexer>) => ()
-  let c = peek-char(lex);
-  while (c & c ~= '\n')
-    consume-char(lex);
-    c := peek-char(lex);
-  end;
-  c & consume-char(lex);        // consume newline
+define function read-comment (lex :: <lexer>) => (token :: <comment-token>)
+  assert('/' == consume-char(lex));
+  let comment = make(<stretchy-vector>);
+  add!(comment, '/');
+  let ch = peek-char(lex)
+             | lex-error(lex, "end of stream while reading comment");
+  add!(comment, consume-char(lex));
+  select (ch)
+    '*' =>
+      iterate loop (prev = #f, ch = peek-char(lex))
+        ch | lex-error(lex, "end of stream while reading block comment");
+        ch == '\0' & lex-error(lex, "invalid character code 0 (zero) in block comment");
+        add!(comment, consume-char(lex));
+        if (~(prev == '*' & ch == '/'))
+          loop(ch, peek-char(lex));
+        end;
+      end;
+    '/' =>
+      iterate loop (ch = peek-char(lex))
+        if (ch & ch ~== '\n')
+          ch == '\0' & lex-error(lex, "invalid character code 0 (zero) in line comment");
+          add!(comment, consume-char(lex));
+          loop(peek-char(lex));
+        end;
+      end;
+    otherwise =>
+      lex-error(lex, "expecting '/' or '*' for start of comment, got %=", ch);
+  end select;
+  let text = as(<string>, comment);
+  make(<comment-token>, text: text, value: text)
 end function;
 
 // When this is called, consume-char will next return either " or '.
@@ -353,9 +432,9 @@ define function read-string-literal
     elseif (char == '\\')
       loop(pair(char, token-chars), string-chars, #t)
     elseif (char == delim)
-      make-token(lex,
-                 as(<string>, reverse!(token-chars)),
-                 as(<string>, reverse!(string-chars)))
+      make(<string-token>,
+           text: as(<string>, reverse!(token-chars)),
+           value: as(<string>, reverse!(string-chars)))
     elseif (char == '\0' | char == '\n')
       lex-error(lex, "invalid character %= in string constant", char)
     else
