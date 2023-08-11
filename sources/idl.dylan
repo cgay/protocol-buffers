@@ -66,6 +66,8 @@ define class <lexer> (<object>)
   // This is optional and solely for use in error messages.
   // Using <string> instead of <pathname> to avoid dependency on System library.
   constant slot lexer-file :: <string> = "<stream>", init-keyword: file:;
+  constant slot lexer-whitespace? :: <bool> = #f, init-keyword: whitespace?:;
+  constant slot lexer-comments? :: <bool> = #f, init-keyword: comments?:;
 end class;
 
 define generic read-token
@@ -136,64 +138,55 @@ define inline function hex-value (ch :: <char>) => (i :: <int>)
   end
 end function;
 
-// TODO: the spec isn't clear about such things as whether there must be
-// whitespace between an identifier and a string, so for example is `import
-// public"a.b.c";` valid? We'll just have to do what protoc does in such cases.
 define method read-token
     (lex :: <lexer>) => (token :: false-or(<token>))
-  local method finish (chars, token-class) => (token :: <token>)
-          let text = as(<string>, reverse!(chars));
-          element($well-known-tokens, text, default: #f)
-            | make(token-class, text: text, value: text)
-        end;
-  iterate loop (chars = #())
-    let char = peek-char(lex);
-    if (~char)
-      // End of stream. It's possible for the token type to be incorrect here,
-      // but since only '}', ';', and whitespace are valid before EOF it will
-      // only happen if the file is invalid anyway.
-      chars.size > 0 & finish(chars, <whitespace-token>)
-    else
-      select (char)
-        ' ', '\n', '\r', '\t', '\f', '\<0B>' =>
-          read-whitespace(lex);
-        '/' =>
-          read-comment(lex);
-        '"', '\'' =>
-          read-string-literal(lex);
-        '=', '{', '}', '[', ']', '(', ')', '<', '>', ':', ';', ',' =>
-          consume-char(lex);
-          // (Could avoid making a string here.)
-          let text = make(<string>, size: 1, fill: char);
-          $well-known-tokens[text];
-        '.' =>
-          consume-char(lex);
-          let ch = peek-char(lex);
-          if (decimal-digit?(ch))
-            read-numeric-literal(lex, char, 1, dot-seen?: #t)
-          else
-            $well-known-tokens["."]
-          end;
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
-          read-numeric-literal(lex, char, 1);
-        '-' =>
-          consume-char(lex);
-          read-numeric-literal(lex, peek-char(lex), -1);
-        '+' =>
-          consume-char(lex);
-          read-numeric-literal(lex, peek-char(lex), 1);
-        otherwise =>
-          // According to the spec, identifiers must start with a letter, but
-          // unit tests in Google's protobuf repo assume that leading
-          // underscore is valid so...
-          if (char == '_' | alphabetic?(char))
-            read-identifier-or-reserved-word(lex)
-          else
-            lex-error(lex, "unexpected character: %c", char);
-          end;
-      end select
-    end if
-  end iterate
+  let char = peek-char(lex);
+  select (char)
+    #f =>
+      #f;  // end of stream
+    ' ', '\n', '\r', '\t', '\f', '\<0B>' =>
+      let token = read-whitespace(lex);
+      iff(lex.lexer-whitespace?,
+          token,
+          read-token(lex));
+    '/' =>
+      let token = read-comment(lex);
+      iff(lex.lexer-comments?,
+          token,
+          read-token(lex));
+    '"', '\'' =>
+      read-string-literal(lex);
+    '=', '{', '}', '[', ']', '(', ')', '<', '>', ':', ';', ',' =>
+      consume-char(lex);
+      // (Could avoid making a string here.)
+      let text = make(<string>, size: 1, fill: char);
+      $well-known-tokens[text];
+    '.' =>
+      consume-char(lex);
+      let ch = peek-char(lex);
+      if (decimal-digit?(ch))
+        read-numeric-literal(lex, char, 1, dot-seen?: #t)
+      else
+        $well-known-tokens["."]
+      end;
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
+      read-numeric-literal(lex, char, 1);
+    '-' =>
+      consume-char(lex);
+      read-numeric-literal(lex, peek-char(lex), -1);
+    '+' =>
+      consume-char(lex);
+      read-numeric-literal(lex, peek-char(lex), 1);
+    otherwise =>
+      // According to the spec, identifiers must start with a letter, but
+      // unit tests in Google's protobuf repo assume that leading
+      // underscore is valid so...
+      if (char == '_' | alphabetic?(char))
+        read-identifier-or-reserved-word(lex)
+      else
+        lex-error(lex, "unexpected character: %c", char);
+      end;
+  end select
 end method read-token;
 
 define function read-whitespace (lex :: <lexer>) => (token :: <whitespace-token>)

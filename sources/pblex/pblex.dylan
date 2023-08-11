@@ -13,7 +13,7 @@ define function main
     with-open-file (stream = path)
       let lexer = make(<lexer>, stream: stream);
       while (#t)
-        let token = next-token(lexer);
+        let token = read-token(lexer);
         if (~token)
           exit()
         end;

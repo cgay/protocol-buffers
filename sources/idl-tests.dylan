@@ -3,7 +3,7 @@ Module: protocol-buffers-test-suite
 define function read-all (input :: <string>) => (tokens :: <seq>)
   let tokens = make(<stretchy-vector>);
   with-input-from-string (stream = input)
-    let lex = make(<lexer>, stream: stream);
+    let lex = make(<lexer>, stream: stream, whitespace?: #t, comments?: #t);
     let tok = #t;
     while (tok)
       tok := read-token(lex);
@@ -19,7 +19,7 @@ end function;
 
 define function read-one (input)
   with-input-from-string (stream = input)
-    let lex = make(<lexer>, stream: stream);
+    let lex = make(<lexer>, stream: stream, whitespace?: #t, comments?: #t);
     read-token(lex)
   end
 end function;
