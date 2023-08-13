@@ -31,7 +31,7 @@ Pro ``protoc``:
   easier.
 
 * As the protobuf IDL changes ``protoc`` will support the new changes and will
-  presumable be backward compatible. For small changes we probably won't even
+  presumably be backward compatible. For small changes we probably won't even
   have to update our code generator, at least until we add explicit support for
   the feature.
 
@@ -62,51 +62,53 @@ The following are roughly in order of which should be done first.
   unset, much simpler. No need for is-set vector, nor for %foo internal slot names and
   methods to guard their access. Do proto2 when proto3 functionally complete.
 
+  **Status:** This turned out to be naive because one of the first protos we
+  need to convert is descriptor.proto, in the Google protobuf repo, which is
+  proto2 format.
+
 * DO NOT OPTIMIZE ANYTHING. Write simple, clear Dylan code without any attempt to
   optimize anything in advance. That comes later, based on benchmarks and profiling.
 
 * Write and debug wire format.
 
-* Write an example of the expected protoc generated code, by hand. This will help to
-  tease out the generated code APIs.
+  **Status:** much of this is done but
+  https://github.com/dylan-lang/opendylan/issues/1377 is problematic for large
+  integers.
 
 * Write some tests that use the example to parse protos from a file.
 
-* Write protoc plugin.
+* Write IDL parser.
 
-   For foo.proto with `package foo;`, generate
+  **Status:** Aug 2023, lexer complete, parser underway.
 
-       * foo-proto.dylan
-       * foo-proto-module.dylan
+* Write code generator.
 
-   Do not genarate a library. Instead, users can include the above two files in their LID
-   file. This is more flexible and allows multiple protos (and non-proto Dylan code) to
-   be in the same library and benefit from sealing optimizations.
+  Write an example of the expected protoc generated code, by hand. This will
+  help to tease out the generated code APIs.
 
-   Generating the library definition can be an option later.
+  * option (dylan_module) = "foo";           // default to what?
+  * option (dylan_gen_module_file) = false;  // default to true
+  * option (dylan_gen_library_file) = false; // default to true
+
+  **Status:** (Aug 2023) I wrote much of a hand translated version of
+  descriptor.proto and now I have almost enough to use it in the parser code.
 
 * Write gRPC implementation and hook it into HTTP server.
-
-* Write Text Format parser/printer
 
 * Build system integration. LID file option to invoke protoc:
 
      protocol-buffer: foo.proto -> foo-module.dylan, foo-library.dylan?
 
-* Lazy decoding
-
-* Specialized decoders. For example if the proto objects need to be initialized
-  in a specific order. (That particular case could be handled via proto option
-  annotations.)
+* Write Text Format parser/printer
 
 * Arenas to reduce memory churn
 
 * POD objects? Protocol buffers are intended to be Plain Old Data. In Go people
   often write wrapper types for protobuf types. I'm curious to see if there are
   differences in the way they can be implemented in Dylan.  For example, can we
-  have field options to make the corresponding Dylan slot be `constant` (not if
-  they need to be used with arenas) or `required-init-keyword:`?  Are there
-  safe ways to add behavior to protoc-generated classes in Dylan?
+  have field options to make the corresponding Dylan slot be ``constant`` (not
+  if they need to be used with arenas) or ``required-init-keyword:``?  Are
+  there safe ways to add behavior to protoc-generated classes in Dylan?
 
 
 TODO List
@@ -114,7 +116,7 @@ TODO List
 
 Some specific reminders to myself as I go along.
 
-* Lazy parsing
+* Lazy decoding
 
 * Need to handle the few Dylan reserved words specially if they're used as a
   message field name etc. Also any macros imported into the generated code's
@@ -122,12 +124,16 @@ Some specific reminders to myself as I go along.
   you need to interact with a .proto that you cannot modify. "end" is a common
   example.
 
+  **Status:** Not a problem. Generated slot names all have the class (i.e.,
+  message) name as a prefix.
+
 * limited types for repeated slots. First pass, add a comment about
   the type, like "// repeated int32"
 
-* Emit explicit "define generic" forms with the correct type unions.
-  It will complicate the protoc plugin somewhat. How much of a win is
-  it, if the generated code is sealed anyway?
+* Emit explicit "define generic" forms with the correct type unions.  It will
+  complicate the codegen somewhat. How much of a win is it, if the generated
+  code is sealed anyway? I think the IDE / LSP will emit a more specific
+  arglist, for example.
 
 * for now this code assumes the existence of certain base classes. These
   will be defined elsewhere and will need to be imported with a prefix so
