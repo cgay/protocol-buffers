@@ -1,6 +1,7 @@
 library: protocol-buffers
 Files: library.dylan
        64-bit.dylan
+       descriptor-pb.dylan
        utilities.dylan
        types.dylan
        wire-format.dylan

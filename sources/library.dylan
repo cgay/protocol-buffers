@@ -8,6 +8,8 @@ define library protocol-buffers
   use io,
     import: { format, format-out, print, streams };
   use strings;
+  use system,
+    import: { file-system, locators };
   use uncommon-dylan,
     import: { byte-vector,
               machine-words,
@@ -35,6 +37,7 @@ define module protocol-buffers-impl
   use bit-vector;
   use byte-vector,
     import: { <byte>, <byte-vector> };
+  use file-system;
   use format,
     rename: { format-to-string => sformat }; // for brevity
   use format-out;
@@ -43,6 +46,7 @@ define module protocol-buffers-impl
     rename: { $maximum-integer => $maximum-big-int,
               $minimum-integer => $minimum-big-int,
               <integer> => <big-int> };
+  use locators;
   use machine-words,
     import: { $machine-word-size };
   use print;                    // print[ing]-object
@@ -74,6 +78,7 @@ define module protocol-buffers-impl
     zigzag-encode-32,
     zigzag-encode-64,
 
+    // Lexer
     <lexer>,
     <lexer-error>,
     <token>,
@@ -88,6 +93,13 @@ define module protocol-buffers-impl
     token-text,
     token-value,
     read-token,
+
+    // Parser
+    <parser>,
+    parse-file-stream,
+
+    // descriptor.pb.dylan
+    <file-descriptor-proto>,
 
     camel-to-kebob;
 end module;

@@ -19,11 +19,13 @@ Module: protocol-buffers-impl
 // "(repeated <type>)" since Dylan limited collections are difficult to work
 // with. We may revisit this later.
 
+// TODO: TEMPORARY. Probably should not use uncommon-dylan.
+define constant <sequence> = <seq>;
 
 // FileDescriptorSet
 // The protocol compiler can output a FileDescriptorSet containing the .proto
 // files it parses.
-define sealed class <file-descriptor-set> (<message>)
+define sealed class <file-descriptor-set> (<protocol-buffer-message>)
   // The protocol compiler can output a FileDescriptorSet containing the .proto
   // files it parses.
   slot file-descriptor-set-file :: false-or(<sequence>),
@@ -33,7 +35,7 @@ end class <file-descriptor-set>;
 
 // FileDescriptorProto
 // Describes a complete .proto file.
-define class <file-descriptor-proto> (<message>)
+define class <file-descriptor-proto> (<protocol-buffer-message>)
   slot file-descriptor-proto-name :: false-or(<string>), // file name, relative to root of source tree
     init-value: #f,
     init-keyword: name:;
@@ -66,14 +68,14 @@ define class <file-descriptor-proto> (<message>)
   slot file-descriptor-proto-extension :: false-or(<sequence>), // repeated <field-descriptor-proto>
     init-value: #f,
     init-keyword: extension:;
-  slot file-descriptor-proto-options :: false-or(<file-options>),
+  slot file-descriptor-proto-options :: false-or(/* TODO: <file-options> */ <object>),
     init-value: #f,
     init-keyword: options:;
   // This field contains optional information about the original source code.
   // You may safely remove this entire field without harming runtime
   // functionality of the descriptors -- the information is needed only by
   // development tools.
-  slot file-descriptor-proto-source-code-info :: false-or(<source-code-info>),
+  slot file-descriptor-proto-source-code-info :: false-or(/* TODO: <source-code-info> */ <object>),
     init-value: #f,
     init-keyword: source-code-info:;
   // The syntax of the proto file.
@@ -89,7 +91,7 @@ end class <file-descriptor-proto>;
 
 // DescriptorProto
 // Describes a message type.
-define sealed class <descriptor-proto> (<message>)
+define sealed class <descriptor-proto> (<protocol-buffer-message>)
   slot descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
@@ -111,7 +113,7 @@ define sealed class <descriptor-proto> (<message>)
   slot descriptor-proto-oneof-decl :: false-or(<sequence>), // repeated <oneof-descriptor-proto>
     init-value: #f,
     init-keyword: oneof-decl:;
-  slot descriptor-proto-options :: false-or(<message-options>),
+  slot descriptor-proto-options :: false-or(/* TODO: <message-options> */ <object>),
     init-value: #f,
     init-keyword: options:;
   slot descriptor-proto-reserved-range :: false-or(<sequence>), // repeated <descriptor-proto-reserved-range>
@@ -123,7 +125,7 @@ define sealed class <descriptor-proto> (<message>)
 end class <descriptor-proto>;
 
 // DescriptorProto.ExtensionRange
-define sealed class <descriptor-proto-extension-range> (<message>)
+define sealed class <descriptor-proto-extension-range> (<protocol-buffer-message>)
   slot descriptor-proto-extension-range-start :: false-or(<int32>), // Inclusive.
     init-value: #f,
     init-keyword: start:;
@@ -136,7 +138,7 @@ define sealed class <descriptor-proto-extension-range> (<message>)
 end class <descriptor-proto-extension-range>;
 
 // DescriptorProto.ReservedRange
-define sealed class <descriptor-proto-reserved-range> (<message>)
+define sealed class <descriptor-proto-reserved-range> (<protocol-buffer-message>)
   slot descriptor-proto-reserved-range-start :: false-or(<int32>),
     init-value: #f,
     init-keyword: start:;
@@ -146,7 +148,7 @@ define sealed class <descriptor-proto-reserved-range> (<message>)
 end class <descriptor-proto-reserved-range>;
 
 // ExtensionRangeOptions
-define sealed class <extension-range-options> (<message>)
+define sealed class <extension-range-options> (<protocol-buffer-message>)
   // The parser stores options it doesn't recognize here. See above.
   slot extension-range-options-uninterpreted-option :: false-or(<sequence>),
     init-value: #f,
@@ -158,7 +160,7 @@ end class <extension-range-options>;
 
 // FieldDescriptorProto
 // Describes a field within a message.
-define sealed class <field-descriptor-proto> (<message>)
+define sealed class <field-descriptor-proto> (<protocol-buffer-message>)
   slot field-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
@@ -206,7 +208,7 @@ define sealed class <field-descriptor-proto> (<message>)
     init-value: #f,
     init-keyword: json-name:;
 
-  slot field-descriptior-proto-options :: false-or(<FieldOptions>),
+  slot field-descriptior-proto-options :: false-or(/* TODO: <FieldOptions> */ <object>),
     init-value: #f,
     init-keyword: options:;
 
@@ -231,63 +233,142 @@ define sealed class <field-descriptor-proto> (<message>)
   //
   // Proto2 optional fields do not set this flag, because they already indicate
   // optional with `LABEL_OPTIONAL`.
-  slot field-descriptior-proto-proto3-optional :: false-or(<bool>),
+  slot field-descriptior-proto-proto3-optional :: <bool>,
     init-value: #f,
     init-keyword: proto3-optional:;
 end class <field-descriptor-proto>;
 
-define enum <field-descriptor-proto-type> (<enum>)
-  // 0 is reserved for errors.
-  // Order is weird for historical reasons.
-  $field-descriptor-proto-type-type-double = 1;
-  $field-descriptor-proto-type-type-float  = 2;
-  // Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT64 if
-  // negative values are likely.
-  $field-descriptor-proto-type-type-int64  = 3;
-  $field-descriptor-proto-type-type-uint64 = 4;
-  // Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT32 if
-  // negative values are likely.
-  $field-descriptor-proto-type-type-int32   = 5;
-  $field-descriptor-proto-type-type-fixed64 = 6;
-  $field-descriptor-proto-type-type-fixed32 = 7;
-  $field-descriptor-proto-type-type-bool    = 8;
-  $field-descriptor-proto-type-type-string  = 9;
-  // Tag-delimited aggregate.
-  // Group type is deprecated and not supported in proto3. However, Proto3
-  // implementations should still be able to parse the group wire format and
-  // treat group fields as unknown fields.
-  $field-descriptor-proto-type-type-group   = 10;
-  $field-descriptor-proto-type-type-message = 11;  // Length-delimited aggregate.
 
-  // New in version 2.
-  $field-descriptor-proto-type-type-bytes  = 12;
-  $field-descriptor-proto-type-type-uint32 = 13;
-  $field-descriptor-proto-type-type-enum   = 14;
-  $field-descriptor-proto-type-type-sfixed32 = 15;
-  $field-descriptor-proto-type-type-sfixed64 = 16;
-  $field-descriptor-proto-type-type-sint32   = 17;  // Uses ZigZag encoding.
-  $field-descriptor-proto-type-type-sint64   = 18;  // Uses ZigZag encoding.
-end enum;
+// enum FieldDescriptorProto.Type
+define class <field-descriptor-proto-type> (<protocol-buffer-enum>)
+  constant slot field-descriptor-proto-type-name :: <string>,
+    required-init-keyword: name:;
+  slot field-descriptor-proto-type-value :: <int32>,
+    required-init-keyword: value:;
+end class <field-descriptor-proto-type>;
 
-define enum <field-descriptor-proto-label> (<enum>)
-  // 0 is reserved for errors
-  $field-descriptor-proto-label-label-optional = 1;
-  $field-descriptor-proto-label-label-required = 2;
-  $field-descriptor-proto-label-label-repeated = 3;
-end enum;
+// 0 is reserved for errors.
+// Order is weird for historical reasons.
+define constant $field-descriptor-proto-type-type-double :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_DOUBLE",
+         value: 1);
+define constant $field-descriptor-proto-type-type-float :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_FLOAT",
+         value: 2);
+// Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT64 if
+// negative values are likely.
+define constant $field-descriptor-proto-type-type-int64 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_INT64",
+         value: 3);
+define constant $field-descriptor-proto-type-type-uint64 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_UINT64",
+         value: 4);
+// Not ZigZag encoded.  Negative numbers take 10 bytes.  Use TYPE_SINT32 if
+// negative values are likely.
+define constant $field-descriptor-proto-type-type-int32 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_INT32",
+         value: 5);
+define constant $field-descriptor-proto-type-type-fixed64 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_FIXED64",
+         value: 6);
+define constant $field-descriptor-proto-type-type-fixed32 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_FIXED32",
+         value: 7);
+define constant $field-descriptor-proto-type-type-bool :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_BOOL",
+         value: 8);
+define constant $field-descriptor-proto-type-type-string :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_STRING",
+         value: 9);
+// Tag-delimited aggregate.
+// Group type is deprecated and not supported in proto3. However, Proto3
+// implementations should still be able to parse the group wire format and
+// treat group fields as unknown fields.
+define constant $field-descriptor-proto-type-type-group :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_GROUP",
+         value: 10);
+define constant $field-descriptor-proto-type-type-message :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_MESSAGE",
+         value: 11);
+
+// New in version 2.
+define constant $field-descriptor-proto-type-type-bytes :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_BYTES",
+         value: 12);
+define constant $field-descriptor-proto-type-type-uint32 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_UINT32",
+         value: 13);
+define constant $field-descriptor-proto-type-type-enum :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_ENUM",
+         value: 14);
+define constant $field-descriptor-proto-type-type-sfixed32 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_SFIXED32",
+         value: 15);
+define constant $field-descriptor-proto-type-type-sfixed64 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_SFIXED64",
+         value: 16);
+define constant $field-descriptor-proto-type-type-sint32 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_SINT32",
+         value: 17);
+define constant $field-descriptor-proto-type-type-sint64 :: <field-descriptor-proto-type>
+  = make(<field-descriptor-proto-type>,
+         name: "TYPE_SINT64",
+         value: 18);
+// end enum FieldDescriptorProto.Type
+
+
+// enum FieldDescriptorProto.Label
+define class <field-descriptor-proto-label> (<protocol-buffer-enum>)
+  constant slot field-descriptor-proto-label-name :: <string>,
+    required-init-keyword: name:;
+  slot field-descriptor-proto-label-value :: <int32>,
+    required-init-keyword: value:;
+end class <field-descriptor-proto-label>;
+
+// 0 is reserved for errors
+define constant $field-descriptor-proto-label-label-optional :: <field-descriptor-proto-label>
+  = make(<field-descriptor-proto-label>,
+         name: "LABEL_OPTIONAL",
+         value: 1);
+define constant $field-descriptor-proto-label-label-required :: <field-descriptor-proto-label>
+  = make(<field-descriptor-proto-label>,
+         name: "LABEL_REQUIRED",
+         value: 2);
+define constant $field-descriptor-proto-label-label-repeated :: <field-descriptor-proto-label>
+  = make(<field-descriptor-proto-label>,
+         name: "LABEL_REPEATED",
+         value: 3);
+// end enum FieldDescriptorProto.Label
 
 // Describes a oneof.
-define class <oneof-descriptor-proto> (<message>)
+define class <oneof-descriptor-proto> (<protocol-buffer-message>)
   slot oneof-descriptior-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot oneof-descriptior-proto-options :: false-or(<OneofOptions>),
+  slot oneof-descriptior-proto-options :: false-or(/* TODO: <OneofOptions> */ <object>),
     init-value: #f,
     init-keyword: options:;
 end class <oneof-descriptor-proto>;
 
 // Describes an enum type.
-define class <enum-descriptor-proto> (<message>)
+define class <enum-descriptor-proto> (<protocol-buffer-message>)
   slot enum-descriptior-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
@@ -319,7 +400,7 @@ define class <enum-descriptor-proto> (<message>)
 end class <enum-descriptor-proto>;
 
 // EnumDescriptorProto.EnumReservedRange
-define class <enum-descriptor-proto-enum-reserved-range> (<message>)
+define class <enum-descriptor-proto-enum-reserved-range> (<protocol-buffer-message>)
   slot enum-descriptior-proto-enum-reserved-range-start :: false-or(<int32>),
     init-value: #f,
     init-keyword: start:;       // Inclusive.
@@ -329,7 +410,7 @@ define class <enum-descriptor-proto-enum-reserved-range> (<message>)
 end class <enum-descriptor-proto-enum-reserved-range>;
 
 // Describes a value within an enum.
-define class <enum-value-descriptor-proto> (<message>)
+define class <enum-value-descriptor-proto> (<protocol-buffer-message>)
   slot enum-value-descriptior-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
@@ -337,10 +418,12 @@ define class <enum-value-descriptor-proto> (<message>)
     init-value: #f,
     init-keyword: number:;
 
-  slot field-descriptior-proto-options :: false-or(<enum-value-options>),
+  slot field-descriptior-proto-options :: false-or(/* TODO: <enum-value-options> */ <object>),
     init-value: #f,
     init-keyword: options:;
 end class <enum-value-descriptor-proto>;
+
+/* TODO: the rest...
 
 // Describes a service.
 message ServiceDescriptorProto {
@@ -590,7 +673,21 @@ message MessageOptions {
   // Clients can define custom options in extensions of this message. See above.
   extensions 1000 to max;
 }
+*/
 
+// TODO: For now this is just enough to store the set of options used in
+// descriptor.proto: default (stored in <field-descriptor-proto>.default-value),
+// deprecated, and packed.
+define class <field-options> (<protocol-buffer-message>)
+  slot field-options-deprecated :: <bool>,
+    init-value: #f,
+    init-keyword: deprecated:;
+  slot field-options-packed :: <bool>,
+    init-value: #f,
+    init-keyword: packed:;
+end class <field-options>;
+
+/*
 message FieldOptions {
   // The ctype option instructs the C++ code generator to use a different
   // representation of the field than it normally would.  See the specific
@@ -712,21 +809,25 @@ message EnumOptions {
   // Clients can define custom options in extensions of this message. See above.
   extensions 1000 to max;
 }
+*/
 
-message EnumValueOptions {
+define class <enum-value-options> (<protocol-buffer-message>)
   // Is this enum value deprecated?
   // Depending on the target platform, this can emit Deprecated annotations
   // for the enum value, or it will be completely ignored; in the very least,
   // this is a formalization for deprecating enum values.
-  optional bool deprecated = 1 [default = false];
-
+  slot enum-value-options-deprecated :: <bool>,
+    init-value: #f,
+    init-keyword: deprecated:;
   // The parser stores options it doesn't recognize here. See above.
-  repeated UninterpretedOption uninterpreted_option = 999;
-
+  slot enum-value-options-uninterpreted-option :: false-or(<sequence>),
+    init-value: #f,
+    init-keyword: uninterpreted-option:;
   // Clients can define custom options in extensions of this message. See above.
-  extensions 1000 to max;
-}
+  // TODO: extensions 1000 to max;
+end class <enum-value-options>;
 
+/*
 message ServiceOptions {
 
   // Note:  Field numbers 1 through 32 are reserved for Google's internal RPC
@@ -968,5 +1069,4 @@ message GeneratedCodeInfo {
     optional int32 end = 4;
   }
 }
-                    */
-                    
+*/

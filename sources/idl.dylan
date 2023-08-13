@@ -11,8 +11,9 @@ Synopsis: Ad-hoc, recursive descent parser for .proto Interface Definition Langu
 define class <token> (<object>)
   constant slot token-text  :: <string>, required-init-keyword: text:;
   constant slot token-value :: <object>, required-init-keyword: value:;
+  // TODO: reinstate the line+column slots. When a parse error occurs (note,
+  // not a lexer error) we want to report the location of the first bad token.
 end class;
-ignore(token-text, token-value);
 
 define method print-object
     (token :: <token>, stream :: <stream>) => ()
@@ -527,4 +528,366 @@ define function process-unicode-escape
            unicode
          end,
          token-chars)
+end function;
+
+////
+//// Parser
+////
+
+// This is a temporary parser and Dylan code generator that operates directly
+// on the IDL token stream. The plan is to eventually generate a <descriptor>
+// instance for each message, enum, etc and emit those and generate Dylan code
+// from that. This one is for bootstrapping the descriptor code by parsing
+// descriptor.proto.
+
+define class <parse-error> (<protocol-buffer-error>) end;
+
+define function parse-error
+    (format-string :: <string>, #rest args)
+  signal(make(<parse-error>,
+              format-string: format-string,
+              format-arguments: args))
+end function;
+
+define class <parser> (<object>)
+  constant slot %lexer :: <lexer>, required-init-keyword: lexer:;
+end class;
+
+define function next-token (parser :: <parser>) => (token :: false-or(<token>))
+  let token = read-token(parser.%lexer);
+  format-out("%=\n", token); force-out();
+  token
+end function;
+
+
+define generic expect-token
+    (parser :: <parser>, token-specifier :: <object>) => (token :: <token>);
+
+define method expect-token (parser :: <parser>, class :: <class>) => (token :: <token>)
+  let token = next-token(parser);
+  if (~instance?(token, class))
+    parse-error("expected a token of type %= but got %=",
+                class, token.token-text);
+  end;
+  token
+end method;
+
+define method expect-token (parser :: <parser>, text :: <string>) => (token :: <token>)
+  expect-token(parser, list(text));
+end method;
+
+define method expect-token (parser :: <parser>, strings :: <seq>) => (token :: <token>)
+  let token = next-token(parser);
+  if (~member?(token.token-text, strings, test: \=))
+    parse-error("expected token %s but got %=",
+                join(strings, ", ", conjunction: " or "),
+                token.token-text);
+  end;
+  token
+end method;
+
+
+// Retrieve and discard tokens up to the next semicolon.
+define function discard-statement (parser :: <parser>) => (#rest tokens)
+  iterate loop (t = next-token(parser), tokens = #())
+    if (t.token-value == ';')
+      reverse!(tokens)
+    else
+      loop(next-token(parser), pair(t, tokens))
+    end;
+  end;
+end function;
+
+// Fills in the slots of `file-descriptor` based on the parse, but the
+// file-descriptor-proto-name slot is the responsibility of the caller.
+define function parse-file-stream
+    (parser :: <parser>, file-descriptor :: <file-descriptor-proto>) => ()
+  iterate loop (token = next-token(parser))
+    if (token)
+      select (token.token-value)
+        #"syntax" =>
+          expect-token(parser, "=");
+          let token = expect-token(parser, #("proto2", "proto3", "editions"));
+          file-descriptor-proto-syntax(file-descriptor)
+            := token.token-text;
+          expect-token(parser, ";");
+        #"package" =>
+          let package-name = parse-qualified-identifier(parser);
+          file-descriptor-proto-package(file-descriptor)
+            := join(package-name, ".");
+        #"option" =>
+          parse-file-option(parser, file-descriptor);
+        #"message" =>
+          if (~file-descriptor-proto-message-type(file-descriptor))
+            file-descriptor-proto-message-type(file-descriptor)
+              := make(<stretchy-vector>);
+          end;
+          add!(file-descriptor-proto-message-type(file-descriptor),
+               parse-message(parser, file-descriptor, #()));
+        #"enum" =>
+          if (~file-descriptor-proto-enum-type(file-descriptor))
+            file-descriptor-proto-enum-type(file-descriptor)
+              := make(<stretchy-vector>);
+          end;
+          add!(file-descriptor-proto-enum-type(file-descriptor),
+               parse-enum(parser, #()));
+        otherwise =>
+          parse-error("unexpected token: %=", token);
+      end select;
+      loop(next-token(parser));
+    end if;
+  end iterate;
+end function;
+
+// TODO: see if option parsers can share code.
+define function parse-file-option
+    (parser :: <parser>, file-descriptor :: <file-descriptor-proto>) => ()
+  let option-name = expect-token(parser, <identifier-token>);
+  expect-token(parser, "=");
+  // TODO: finish option parsing. We don't care about most of the FileOptions
+  // fields (java, swift, go, etc options) but there are a few we'll need to
+  // handle, and there will probably be Dylan options at some point.
+  discard-statement(parser);
+end function;
+
+define function parse-message
+    (parser :: <parser>, file :: <file-descriptor-proto>, parent-names :: <list>)
+ => (msg :: <descriptor-proto>)
+  let name-token = next-token(parser);
+  let name = name-token.token-text;
+  let name-path = pair(name, parent-names);
+  expect-token(parser, "{");
+  let fields   = make(<stretchy-vector>);
+  let messages = make(<stretchy-vector>);
+  let enums    = make(<stretchy-vector>);
+  let options  = make(<stretchy-vector>);
+  block (done)
+    while (#t)
+      let token = parser.next-token;
+      select (token.token-value)
+        #"repeated", #"optional", #"required" =>
+          add!(fields, parse-message-field(parser, file, label: token));
+        #"map", #"double", #"float", #"int32", #"int64", #"uint32", #"uint64",
+        #"sint32", #"sint64", #"fixed32", #"fixed64", #"sfixed32", #"sfixed64",
+        #"bool", #"string", #"bytes" =>
+          add!(fields, parse-message-field(parser, file, type: token));
+        #"group" =>
+          discard-statement(parser); // TODO: parse-group(parser);
+        #"oneof" =>
+          discard-statement(parser); // TODO: parse-oneof(parser);
+        #"option" =>
+          ;  // not yet: add!(options, parse-message-option(parser));
+        #"extensions" =>
+          discard-statement(parser); // TODO: parse-message-extensions(parser);
+        #"reserved" =>
+          discard-statement(parser); // TODO: parse-reserved-field-numbers(parser);
+        #"message" =>
+          add!(messages, parse-message(parser, file, name-path));
+        #"enum" =>
+          add!(enums, parse-enum(parser, name-path));
+        #"extend" =>
+          discard-statement(parser); // TODO: parse-extend(parser, message-names);
+        ';' =>                    // empty statement,
+          ;                       // do nothing
+        '}' =>
+          done();
+        otherwise =>
+          if (instance?(token, <identifier-token>))
+            // Looking at a proto3 message-, enum-, or group-typed field.
+            add!(fields, parse-message-field(parser, file, type: token));
+          else
+            parse-error("unexpected message element starting with %=",
+                        token.token-text);
+          end;
+      end select;
+    end while;
+  end block;
+  let dylan-class-name
+    = concat("<", join(map(camel-to-kebob, reverse!(name-path)), "-"), ">");
+  make(<descriptor-proto>,
+       name: name,
+       field: fields,
+       nested-type: messages,   // This slot seems badly named in descriptor.proto?
+       enum-type: enums
+       // TODO: rest of the fields...
+       )
+end function;
+
+define function parse-enum
+    (parser :: <parser>, parent-names :: <list>) => (enum :: <enum-descriptor-proto>)
+  let name-token = next-token(parser);
+  let name = name-token.token-text;
+  let name-path = pair(name, parent-names);
+  expect-token(parser, "{");
+  let fields  = make(<stretchy-vector>);
+  let options = make(<stretchy-vector>);
+  block (done)
+    while (#t)
+      let token = parser.next-token;
+      select (token.token-value)
+        #"option" =>
+          discard-statement(parser);
+        #"reserved" =>
+          discard-statement(parser);
+        '}' =>
+          done();
+        otherwise =>
+          add!(fields, parse-enum-field(parser, token));
+      end;
+    end;
+  end;
+  fields.size > 0
+    | parse-error("enum %= must have at least one enum value",
+                  join(reverse!(name-path), "."));
+  make(<enum-descriptor-proto>,
+       name: name,
+       value: fields,
+       options: options,
+       reserved-name: #f,       // TODO
+       reserved-range: #f)      // TODO
+end function;
+
+define function parse-enum-field
+    (parser :: <parser>, name :: <token>) => (field :: <enum-value-descriptor-proto>)
+  if (~instance?(name, <reserved-word-token>)
+        & ~instance?(name, <identifier-token>))
+    parse-error("unexpected token type %=", name);
+  end;
+  // TODO: group is explicitly called out as reserved, but there must be others?
+  if (name.token-text = "group")
+    parse-error("'group' may not be used as an enum value name");
+  end;
+  expect-token(parser, "=");
+  let number = expect-token(parser, <number-token>);
+  let options = #f;
+  if ('[' == token-value(expect-token(parser, #(";", "["))))
+    options := parse-enum-value-options(parser);
+  end;
+  make(<enum-value-descriptor-proto>,
+       name: name.token-text,
+       number: number.token-value,
+       options: options)
+end function;
+
+// TODO: this is the bare minimum to parse descriptor.proto
+define function parse-enum-value-options
+    (parser :: <parser>) => (options :: <enum-value-options>)
+  let options = make(<enum-value-options>);
+  iterate loop (token = next-token(parser))
+    if (~token | token.token-value ~== '}')
+      expect-token(parser, "=");
+      let value = expect-token(parser, <boolean-token>);
+      select (token.token-text by \=)
+        "deprecated" =>
+          enum-value-options-deprecated(options)
+            := token-value(value);
+        otherwise =>
+          // TODO: store in uninterpreted-option slot.
+          format-out("WARNING: ignoring enum value option %= = %=\n",
+                     token.token-text, value.token-text);
+      end select;
+      if (',' == token-value(expect-token(parser, #(",", "]"))))
+        loop(next-token(parser))
+      end;
+    end if;
+  end iterate;
+  options
+end function;
+
+// A QualifiedIdentifier (unlike a TypeName) may not have a leading dot.
+// Returns a sequence of string, without the intervening dots.
+// https://protobuf.com/docs/language-spec#package-declaration
+define function parse-qualified-identifier
+    (parser :: <parser>) => (name :: <seq>)
+  iterate loop (token = expect-token(parser, <identifier-token>), names = #())
+    let name = token.token-text;
+    let tok = expect-token(parser, #(";", "."));
+    if (tok.token-value == '.')
+      loop(expect-token(parser, <identifier-token>), pair(name, names))
+    else
+      reverse!(names)
+    end
+  end
+end function;
+
+define function parse-message-field
+    (parser :: <parser>, file :: <file-descriptor-proto>,
+     #key label :: false-or(<token>), // if provided, parsing a proto2 field
+          type :: false-or(<token>))  // if provided, parsing a proto3 field
+ => (field :: <field-descriptor-proto>)
+  let type = type | next-token(parser);
+  // TODO: field types that are fully qualified names. skipping for now since
+  // descriptor.proto doesn't use them.
+  if (~instance?(type, <reserved-word-token>)
+        & ~instance?(type, <identifier-token>))
+    parse-error("unexpected token type %=", type);
+  end;
+  let name = next-token(parser);
+  // TODO: group is explicitly called out as reserved, but there must be others?
+  if (name.token-text = "group")
+    parse-error("'group' may not be used as a field name");
+  end;
+  expect-token(parser, "=");
+  let number = expect-token(parser, <number-token>);
+  let default = #f;
+  let options = #f;
+  if ('[' == token-value(expect-token(parser, #(";", "["))))
+    let (d, o) = parse-field-options(parser);
+    default := d;
+    options := o;
+  end;
+  make(<field-descriptor-proto>,
+       name: name.token-text,
+       number: number.token-value,
+       label: label & select (label.token-value)
+                        #"repeated" => $field-descriptor-proto-label-label-repeated;
+                        #"required" => $field-descriptor-proto-label-label-required;
+                        #"optional" => $field-descriptor-proto-label-label-optional;
+                      end,
+       default-value: default,
+       // TODO: for built-in types (bool, int32, etc) this is easy
+       // but if `type` names a message, enum, or group then I
+       // think we need a second pass to fill it in because it
+       // could be a forward reference. Also... we don't have to set this.
+       //type: enum-field-from-name(<field-descriptor-proto-type>,
+       //                           concat("TYPE_", uppercase(type.token-text)))
+       //        | ...?
+       type-name: type.token-text,
+       options: options,
+       // TODO: what about syntax = editions?
+       proto3-optional:
+         label
+         & label.token-text = "optional"
+         & file-descriptor-proto-syntax(file) = "proto3")
+end function parse-message-field;
+
+// TODO: For now this is just enough to handle the set of options used in
+// descriptor.proto: default, deprecated, and packed.
+define function parse-field-options
+    (parser :: <parser>) => (default, options :: <field-options>)
+  let default = #f;
+  let options = make(<field-options>);
+  iterate loop (token = next-token(parser))
+    if (token)
+      expect-token(parser, "=");
+      let value = next-token(parser);
+      select (token.token-text by \=)
+        "packed" =>
+          field-options-packed(options) := token-value(value);
+        "deprecated" =>
+          field-options-deprecated(options) := token-value(value);
+        "default" =>
+          default := token-text(value);
+        // TODO: handle more well-known options.
+        otherwise =>
+          // TODO: store in uninterpreted-option slot.
+          format-out("WARNING: ignoring field option %= = %=\n",
+                     token.token-text, value.token-text);
+      end select;
+      if (',' == token-value(expect-token(parser, #(",", "]"))))
+        loop(next-token(parser))
+      end;
+    end if;
+  end iterate;
+  values(default, options)
 end function;

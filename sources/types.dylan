@@ -31,7 +31,28 @@ ignore(%boolean-field-bits,
 
 // Superclass of all generated protocol buffer enums.
 define open abstract class <protocol-buffer-enum> (<protocol-buffer-object>)
+  constant each-subclass slot enum-instances-by-name :: <string-table>
+    = make(<string-table>);
+  constant each-subclass slot enum-instances-by-value :: <table>
+    = make(<table>);
 end class;
+
+define method initialize (instance :: <protocol-buffer-enum>, #key name, value) => ()
+  let by-name = instance.enum-instances-by-name;
+  if (element(by-name, name, default: #f))
+    // TODO: If we do this check in the code generator (caller) instead, we can
+    // add the enum type name to the error message. Or add another each-subclass
+    // slot containing the type name.
+    pb-error("duplicate enum field name %=", name);
+  end;
+  // TODO: handle aliases if allow_alias set.
+  by-name[name] := instance;
+  let by-value = instance.enum-instances-by-value;
+  if (element(by-value, value, default: #f))
+    pb-error("duplicate enum field value %=", value);
+  end;
+  by-value[value] := instance;
+end method;
 
 // A set of constants to identify the scalar types defined in the protobuf
 // spec.  https://developers.google.com/protocol-buffers/docs/proto3#scalar
