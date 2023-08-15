@@ -6,7 +6,7 @@ Module: protocol-buffers-impl
 // generated Dylan code should look like. That includes how the code should be formatted
 // by the protoc plugin, which may not exactly match the usual Dylan style.
 
-// This code reflects the fact that descriptior.proto uses proto2 syntax:
+// This code reflects the fact that descriptor.proto uses proto2 syntax:
 // * Optional and repeated fields are typed false-or(<foo>)
 // * Required fields are typed <foo>, do not have an initial value, and
 //   have a required-init-keyword:.
@@ -208,7 +208,7 @@ define sealed class <field-descriptor-proto> (<protocol-buffer-message>)
     init-value: #f,
     init-keyword: json-name:;
 
-  slot field-descriptior-proto-options :: false-or(/* TODO: <FieldOptions> */ <object>),
+  slot field-descriptor-proto-options :: false-or(/* TODO: <FieldOptions> */ <object>),
     init-value: #f,
     init-keyword: options:;
 
@@ -233,7 +233,7 @@ define sealed class <field-descriptor-proto> (<protocol-buffer-message>)
   //
   // Proto2 optional fields do not set this flag, because they already indicate
   // optional with `LABEL_OPTIONAL`.
-  slot field-descriptior-proto-proto3-optional :: <bool>,
+  slot field-descriptor-proto-proto3-optional :: <bool>,
     init-value: #f,
     init-keyword: proto3-optional:;
 end class <field-descriptor-proto>;
@@ -359,25 +359,25 @@ define constant $field-descriptor-proto-label-label-repeated :: <field-descripto
 
 // Describes a oneof.
 define class <oneof-descriptor-proto> (<protocol-buffer-message>)
-  slot oneof-descriptior-proto-name :: false-or(<string>),
+  slot oneof-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot oneof-descriptior-proto-options :: false-or(/* TODO: <OneofOptions> */ <object>),
+  slot oneof-descriptor-proto-options :: false-or(/* TODO: <OneofOptions> */ <object>),
     init-value: #f,
     init-keyword: options:;
 end class <oneof-descriptor-proto>;
 
 // Describes an enum type.
 define class <enum-descriptor-proto> (<protocol-buffer-message>)
-  slot enum-descriptior-proto-name :: false-or(<string>),
+  slot enum-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
 
-  slot enum-descriptior-proto-value :: false-or(<sequence>), // repeated EnumValueDescriptorProto
+  slot enum-descriptor-proto-value :: false-or(<sequence>), // repeated EnumValueDescriptorProto
     init-value: #f,
     init-keyword: value:;
 
-  slot enum-descriptior-proto-options :: false-or(<sequence>), // repeated EnumOptions
+  slot enum-descriptor-proto-options :: false-or(<sequence>), // repeated EnumOptions
     init-value: #f,
     init-keyword: options:;
 
@@ -388,37 +388,37 @@ define class <enum-descriptor-proto> (<protocol-buffer-message>)
   // Note that this is distinct from DescriptorProto.ReservedRange in that it
   // is inclusive such that it can appropriately represent the entire int32
   // domain.
-  slot enum-descriptior-proto-reserved-range :: false-or(<sequence>), // repeated <enum-descriptor-proto-enum-reserved-range>
+  slot enum-descriptor-proto-reserved-range :: false-or(<sequence>), // repeated <enum-descriptor-proto-enum-reserved-range>
     init-value: #f,
     init-keyword: reserved-range:;
 
   // Reserved enum value names, which may not be reused. A given name may only
   // be reserved once.
-  slot enum-descriptior-proto-reserved-name :: false-or(<string>),
+  slot enum-descriptor-proto-reserved-name :: false-or(<string>),
     init-value: #f,
     init-keyword: reserved-name:;
 end class <enum-descriptor-proto>;
 
 // EnumDescriptorProto.EnumReservedRange
 define class <enum-descriptor-proto-enum-reserved-range> (<protocol-buffer-message>)
-  slot enum-descriptior-proto-enum-reserved-range-start :: false-or(<int32>),
+  slot enum-descriptor-proto-enum-reserved-range-start :: false-or(<int32>),
     init-value: #f,
     init-keyword: start:;       // Inclusive.
-  slot enum-descriptior-proto-enum-reserved-range-end :: false-or(<int32>),
+  slot enum-descriptor-proto-enum-reserved-range-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;         // Inclusive.
 end class <enum-descriptor-proto-enum-reserved-range>;
 
 // Describes a value within an enum.
 define class <enum-value-descriptor-proto> (<protocol-buffer-message>)
-  slot enum-value-descriptior-proto-name :: false-or(<string>),
+  slot enum-value-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot enum-value-descriptior-proto-number :: false-or(<int32>),
+  slot enum-value-descriptor-proto-number :: false-or(<int32>),
     init-value: #f,
     init-keyword: number:;
 
-  slot field-descriptior-proto-options :: false-or(/* TODO: <enum-value-options> */ <object>),
+  slot field-descriptor-proto-options :: false-or(/* TODO: <enum-value-options> */ <object>),
     init-value: #f,
     init-keyword: options:;
 end class <enum-value-descriptor-proto>;

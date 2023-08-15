@@ -5,8 +5,7 @@ define library protocol-buffers
   use collections,
     import: { bit-vector };
   use generic-arithmetic;
-  use io,
-    import: { format, format-out, print, streams };
+  use io;
   use strings;
   use system,
     import: { file-system, locators };
@@ -50,6 +49,7 @@ define module protocol-buffers-impl
   use machine-words,
     import: { $machine-word-size };
   use print;                    // print[ing]-object
+  use standard-io;
   use streams;
   use strings;
   use uncommon-dylan;
@@ -98,18 +98,13 @@ define module protocol-buffers-impl
     <parser>,
     parse-file-stream,
 
-    // descriptor.pb.dylan
+    // descriptor-pb.dylan
     <file-descriptor-proto>,
 
+    // Code generator
+    generate-dylan-module,
+    generate-dylan-code,
+
+    // Utilities
     camel-to-kebob;
-end module;
-
-// Interface Definition Language (IDL) -- .proto file parser
-define module idl
-  use streams;
-  use strings;
-  use uncommon-dylan;
-  use uncommon-utils;
-
-  export
 end module;

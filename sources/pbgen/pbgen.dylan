@@ -31,7 +31,7 @@ define function main
     exit-application(2);
   end;
   let path = arguments[0];
-  parse-file(path);
+  generate-dylan-module(parse-file(path), library-name: "my-library");
   exit-application(0);
 end function;
 

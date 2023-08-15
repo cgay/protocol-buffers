@@ -554,9 +554,7 @@ define class <parser> (<object>)
 end class;
 
 define function next-token (parser :: <parser>) => (token :: false-or(<token>))
-  let token = read-token(parser.%lexer);
-  format-out("%=\n", token); force-out();
-  token
+  read-token(parser.%lexer)
 end function;
 
 
@@ -702,8 +700,6 @@ define function parse-message
       end select;
     end while;
   end block;
-  let dylan-class-name
-    = concat("<", join(map(camel-to-kebob, reverse!(name-path)), "-"), ">");
   make(<descriptor-proto>,
        name: name,
        field: fields,
@@ -799,13 +795,13 @@ end function;
 // https://protobuf.com/docs/language-spec#package-declaration
 define function parse-qualified-identifier
     (parser :: <parser>) => (name :: <seq>)
-  iterate loop (token = expect-token(parser, <identifier-token>), names = #())
+  iterate loop (token = next-token(parser), names = #())
     let name = token.token-text;
     let tok = expect-token(parser, #(";", "."));
     if (tok.token-value == '.')
-      loop(expect-token(parser, <identifier-token>), pair(name, names))
+      loop(next-token(parser), pair(name, names))
     else
-      reverse!(names)
+      reverse!(pair(name, names))
     end
   end
 end function;
