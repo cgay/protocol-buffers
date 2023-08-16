@@ -11,7 +11,7 @@ define constant $max-int64 :: <big-int> = big--(big-^(2, 63), 1);
 define constant $max-uint64 :: <big-int> = big--(big-^(2, 64), 1);
 
 define constant <int32> = limited(<int>, min: $min-int32, max: $max-int32);
-define constant <uint32> = limited(<int>, min: $min-int32, max: $max-int32);
+define constant <uint32> = limited(<int>, min: 0, max: $max-uint32);
 
 // BUG: There are no `limited` methods on <big-int> so we can't limit this
 // to the exact range of uint64, but at least this type can represent all the
