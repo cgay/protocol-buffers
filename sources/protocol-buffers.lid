@@ -1,5 +1,8 @@
 library: protocol-buffers
 Files: library.dylan
+       interface-module.dylan
+       descriptor-module-pb.dylan
+       implementation-module.dylan
        64-bit.dylan
        descriptor-pb.dylan
        utilities.dylan

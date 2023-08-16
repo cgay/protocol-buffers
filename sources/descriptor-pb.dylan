@@ -1,4 +1,4 @@
-Module: protocol-buffers-impl
+Module: google-protobuf
 
 // This file implements by hand what we eventually expect to be able to generate for
 // https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto
@@ -19,8 +19,6 @@ Module: protocol-buffers-impl
 // "(repeated <type>)" since Dylan limited collections are difficult to work
 // with. We may revisit this later.
 
-// TODO: TEMPORARY. Probably should not use uncommon-dylan.
-define constant <sequence> = <seq>;
 
 // FileDescriptorSet
 // The protocol compiler can output a FileDescriptorSet containing the .proto
@@ -233,7 +231,7 @@ define sealed class <field-descriptor-proto> (<protocol-buffer-message>)
   //
   // Proto2 optional fields do not set this flag, because they already indicate
   // optional with `LABEL_OPTIONAL`.
-  slot field-descriptor-proto-proto3-optional :: <bool>,
+  slot field-descriptor-proto-proto3-optional :: <boolean>,
     init-value: #f,
     init-keyword: proto3-optional:;
 end class <field-descriptor-proto>;
@@ -679,10 +677,10 @@ message MessageOptions {
 // descriptor.proto: default (stored in <field-descriptor-proto>.default-value),
 // deprecated, and packed.
 define class <field-options> (<protocol-buffer-message>)
-  slot field-options-deprecated :: <bool>,
+  slot field-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot field-options-packed :: <bool>,
+  slot field-options-packed :: <boolean>,
     init-value: #f,
     init-keyword: packed:;
 end class <field-options>;
@@ -816,7 +814,7 @@ define class <enum-value-options> (<protocol-buffer-message>)
   // Depending on the target platform, this can emit Deprecated annotations
   // for the enum value, or it will be completely ignored; in the very least,
   // this is a formalization for deprecating enum values.
-  slot enum-value-options-deprecated :: <bool>,
+  slot enum-value-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
   // The parser stores options it doesn't recognize here. See above.

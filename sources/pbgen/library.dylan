@@ -12,6 +12,7 @@ end library;
 define module pbgen
   use file-system;
   use format-out;
+  use google-protobuf;
   use locators;
   use protocol-buffers-impl;
   use streams;
