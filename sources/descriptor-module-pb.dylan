@@ -105,6 +105,8 @@ define module google-protobuf
     enum-value-descriptor-proto-number-setter,
     enum-value-descriptor-proto-options,
     enum-value-descriptor-proto-options-setter,
+    <oneof-descriptor-proto>,
+    oneof-descriptor-proto-name,
     <file-options>,
     file-options-java-package,
     file-options-java-package-setter,

@@ -14,3 +14,17 @@ define function pb-error
              format-string: format-string,
              format-arguments: format-args));
 end function;
+
+
+define variable *debug?* :: <bool> = #t;
+
+define function debug (format-string, #rest format-args) => ()
+  if (*debug?*)
+    apply(format-err, concat("DEBUG: ", format-string), format-args);
+    if (format-string.size > 0
+          & format-string[format-string.size - 1] ~== '\n')
+      format-err("\n");
+    end;
+    force-err();
+  end;
+end function;

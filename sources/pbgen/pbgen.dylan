@@ -31,10 +31,13 @@ define function main
     exit-application(2);
   end;
   let path = arguments[0];
-  generate-dylan-module(parse-file(path), library-name: "my-library");
+  let file-descriptor = parse-file(path);
+  // TODO: set up output streams in generator.
+  // TODO: generate library name
+  let generator = make(<generator>);
+  generate-dylan-code(generator, file-descriptor);
   exit-application(0);
 end function;
 
-// Calling our top-level function (which may have any name) is the last
-// thing we do.
-main(application-name(), application-arguments());
+main(application-name(),
+     application-arguments());

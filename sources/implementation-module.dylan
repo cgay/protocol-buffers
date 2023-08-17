@@ -54,7 +54,7 @@ define module protocol-buffers-impl
     zigzag-encode-32,
     zigzag-encode-64,
 
-    // Lexer
+    // Lexer (probably don't need most of these)
     <lexer>,
     <lexer-error>,
     <token>,
@@ -75,9 +75,14 @@ define module protocol-buffers-impl
     parse-file-stream,
 
     // Code generator
-    generate-dylan-module,
+    <generator>,
     generate-dylan-code,
 
     // Utilities
-    camel-to-kebob;
+    camel-to-kebob,
+    debug,
+
+    // For testing only
+    dylan-name,
+    dylan-class-name;
 end module;

@@ -237,12 +237,8 @@ define sealed class <field-descriptor-proto> (<protocol-buffer-message>)
 end class <field-descriptor-proto>;
 
 
-// enum FieldDescriptorProto.Type
+// begin enum FieldDescriptorProto.Type
 define class <field-descriptor-proto-type> (<protocol-buffer-enum>)
-  constant slot field-descriptor-proto-type-name :: <string>,
-    required-init-keyword: name:;
-  slot field-descriptor-proto-type-value :: <int32>,
-    required-init-keyword: value:;
 end class <field-descriptor-proto-type>;
 
 // 0 is reserved for errors.
