@@ -9,7 +9,7 @@ define library protocol-buffers
   use io;
   use strings;
   use system,
-    import: { file-system, locators };
+    import: { file-system, locators, threads };
   use uncommon-dylan,
     import: { byte-vector,
               machine-words,

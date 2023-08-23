@@ -9,17 +9,30 @@ Synopsis: Ad-hoc, recursive descent parser for .proto Interface Definition Langu
 
 
 define class <token> (<object>)
-  constant slot token-text  :: <string>, required-init-keyword: text:;
-  constant slot token-value :: <object>, required-init-keyword: value:;
-  // TODO: reinstate the line+column slots. When a parse error occurs (note,
-  // not a lexer error) we want to report the location of the first bad token.
+  constant slot token-text   :: <string>, required-init-keyword: text:;
+  constant slot token-value  :: <object>, required-init-keyword: value:;
+  constant slot token-line   :: <int>,    required-init-keyword: line:;
+  constant slot token-column :: <int>,    required-init-keyword: column:;
 end class;
 
 define method print-object
     (token :: <token>, stream :: <stream>) => ()
   printing-object (token, stream)
-    format(stream, "text: %=, value: %=", token.token-text, token.token-value)
+    format(stream, "%=, line: %d, col: %d",
+           token.token-text, token.token-line, token.token-column)
   end;
+end method;
+
+define thread variable *lexer* :: false-or(<lexer>) = #f;
+
+// Fill in the line and column from the current *lexer* values.
+define method make
+    (class :: subclass(<token>), #key text, value) => (t :: <token>)
+  next-method(class,
+              text: text,
+              value: value,
+              line: lexer-line(*lexer*),
+              column: lexer-column(*lexer*))
 end method;
 
 define class <punctuation-token>   (<token>) end; // {, }, =, etc.
@@ -32,6 +45,7 @@ define class <comment-token>       (<token>) end;
 define class <whitespace-token>    (<token>) end;
 
 
+// Why is "inf" in this list but not "nan"?
 define constant $reserved-words
   = #["bool", "bytes", "double", "enum", "extend", "extensions", "fixed32", "fixed64",
       "float", "group", "import", "inf", "int32", "int64", "map", "max", "message",
@@ -39,26 +53,9 @@ define constant $reserved-words
       "reserved", "returns", "rpc", "service", "sfixed32", "sfixed64", "sint32",
       "sint64", "stream", "string", "syntax", "to", "uint32", "uint64", "weak"];
 
-define constant $well-known-tokens :: <string-table>
-  = begin
-      let t = make(<string-table>);
-      for (c in ";,.:=(){}[]<>/")
-        let text = make(<string>, size: 1, fill: c);
-        t[text] := make(<punctuation-token>, text: text, value: c);
-      end;
-      for (text in $reserved-words)
-        t[text] := make(<reserved-word-token>,
-                        text: text,
-                        value: as(<symbol>, text));
-      end;
-      t["true"] := make(<boolean-token>, text: "true", value: #t);
-      t["false"] := make(<boolean-token>, text: "false", value: #f);
-      t["nan"] := make(<number-token>, text: "nan", value: 0.0d0 / 0.0d0);
-      t["inf"] := make(<number-token>, text: "nan", value: 1.0d0 / 0.0d0);
-      // see read-numeric-literal
-      t["-inf"] := make(<number-token>, text: "nan", value: -1.0d0 / 0.0d0);
-      t
-    end;
+define inline function reserved-word? (text :: <string>) => (_ :: <bool>)
+  member?(text, $reserved-words, test: \=)
+end function;
 
 define class <lexer> (<object>)
   slot lexer-line :: <int> = 1;
@@ -141,6 +138,13 @@ end function;
 
 define method read-token
     (lex :: <lexer>) => (token :: false-or(<token>))
+  dynamic-bind (*lexer* = lex)
+    read-token-1(lex)
+  end
+end method;
+
+define function read-token-1
+    (lex :: <lexer>) => (token :: false-or(<token>))
   let char = peek-char(lex);
   select (char)
     #f =>
@@ -149,26 +153,26 @@ define method read-token
       let token = read-whitespace(lex);
       iff(lex.lexer-whitespace?,
           token,
-          read-token(lex));
+          read-token-1(lex));
     '/' =>
       let token = read-comment(lex);
       iff(lex.lexer-comments?,
           token,
-          read-token(lex));
+          read-token-1(lex));
     '"', '\'' =>
       read-string-literal(lex);
     '=', '{', '}', '[', ']', '(', ')', '<', '>', ':', ';', ',' =>
       consume-char(lex);
       // (Could avoid making a string here.)
       let text = make(<string>, size: 1, fill: char);
-      $well-known-tokens[text];
+      make(<punctuation-token>, text: text, value: char);
     '.' =>
       consume-char(lex);
       let ch = peek-char(lex);
       if (decimal-digit?(ch))
         read-numeric-literal(lex, char, 1, dot-seen?: #t)
       else
-        $well-known-tokens["."]
+        make(<punctuation-token>, text: ".", value: '.')
       end;
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' =>
       read-numeric-literal(lex, char, 1);
@@ -188,7 +192,7 @@ define method read-token
         lex-error(lex, "unexpected character: %c", char);
       end;
   end select
-end method read-token;
+end function read-token-1;
 
 define function read-whitespace (lex :: <lexer>) => (token :: <whitespace-token>)
   // (We might want to optimize the single space case.)
@@ -217,8 +221,6 @@ end function;
 //
 // `char` is either a decimal digit or '.' and has not been consumed.
 // `sign` is 1 or -1
-// Note that "nan" and "inf" are handled via $well-known-tokens but
-// "-inf" is handled here.
 define function read-numeric-literal
     (lex :: <lexer>, char :: <char>, sign :: <int>, #key dot-seen?)
  => (token :: <token>)
@@ -274,7 +276,7 @@ define function read-numeric-literal
             'i' =>
               assert(sign == -1);
               expect(lex, "inf");
-              $well-known-tokens["-inf"];
+              make(<number-token>, text: "-inf", value: -1.0d0 / 0.0d0);
             otherwise =>
               if (text[0] == '0')
                 octal-int-token()
@@ -344,7 +346,8 @@ define function read-numeric-literal
 end function read-numeric-literal;
 
 // EBNF: ident = letter { letter | decimalDigit | "_" }
-define function read-identifier-or-reserved-word (lex :: <lexer>) => (token :: <token>)
+define function read-identifier-or-reserved-word
+    (lex :: <lexer>) => (token :: <token>)
   // Caller already confirmed the peeked char is a letter.
   let identifier = make(<stretchy-vector>);
   iterate loop (ch = peek-char(lex))
@@ -354,8 +357,11 @@ define function read-identifier-or-reserved-word (lex :: <lexer>) => (token :: <
     end;
   end;
   let text = as(<string>, identifier);
-  element($well-known-tokens, text, default: #f)
-    | make(<identifier-token>, text: text, value: text)
+  if (reserved-word?(text))
+    make(<reserved-word-token>, text: text, value: as(<symbol>, text))
+  else
+    make(<identifier-token>, text: text, value: text)
+  end
 end function;
 
 define function read-comment (lex :: <lexer>) => (token :: <comment-token>)
@@ -565,7 +571,7 @@ define method expect-token (parser :: <parser>, class :: <class>) => (token :: <
   let token = next-token(parser);
   if (~instance?(token, class))
     parse-error("expected a token of type %= but got %=",
-                class, token.token-text);
+                class, sformat("%=", token));
   end;
   token
 end method;
@@ -579,7 +585,7 @@ define method expect-token (parser :: <parser>, strings :: <seq>) => (token :: <
   if (~member?(token.token-text, strings, test: \=))
     parse-error("expected token %s but got %=",
                 join(strings, ", ", conjunction: " or "),
-                token.token-text);
+                sformat("%=", token));
   end;
   token
 end method;
@@ -630,7 +636,9 @@ define function parse-file-stream
           add!(file-descriptor-proto-enum-type(file-descriptor),
                parse-enum(parser, #()));
         otherwise =>
-          parse-error("unexpected token: %=", token);
+          // sformat is because the default handler prints error messages with
+          // the common-dylan version format, which doesn't call print-object.
+          parse-error("unexpected token: %s", sformat("%=", token));
       end select;
       loop(next-token(parser));
     end if;
@@ -694,8 +702,8 @@ define function parse-message
             // Looking at a proto3 message-, enum-, or group-typed field.
             add!(fields, parse-message-field(parser, file, type: token));
           else
-            parse-error("unexpected message element starting with %=",
-                        token.token-text);
+            parse-error("unexpected message element starting with %s",
+                        sformat("%=", token));
           end;
       end select;
     end while;
@@ -745,9 +753,8 @@ end function;
 
 define function parse-enum-field
     (parser :: <parser>, name :: <token>) => (field :: <enum-value-descriptor-proto>)
-  if (~instance?(name, <reserved-word-token>)
-        & ~instance?(name, <identifier-token>))
-    parse-error("unexpected token type %=", name);
+  if (~instance?(name, <identifier-token>))
+    parse-error("unexpected token type %s", sformat("%=", name));
   end;
   // TODO: group is explicitly called out as reserved, but there must be others?
   if (name.token-text = "group")
@@ -772,7 +779,7 @@ define function parse-enum-value-options
   iterate loop (token = next-token(parser))
     if (~token | token.token-value ~== '}')
       expect-token(parser, "=");
-      let value = expect-token(parser, <boolean-token>);
+      let value = expect-token(parser, #("true", "false"));
       select (token.token-text by \=)
         "deprecated" =>
           enum-value-options-deprecated(options)
@@ -816,7 +823,7 @@ define function parse-message-field
   // descriptor.proto doesn't use them.
   if (~instance?(type, <reserved-word-token>)
         & ~instance?(type, <identifier-token>))
-    parse-error("unexpected token type %=", type);
+    parse-error("unexpected token type %s", sformat("%=", type));
   end;
   let name = next-token(parser);
   // TODO: group is explicitly called out as reserved, but there must be others?

@@ -28,6 +28,8 @@ define module protocol-buffers-impl
   use standard-io;
   use streams;
   use strings;
+  use threads,
+    import: { dynamic-bind };
   use uncommon-dylan;
   use uncommon-utils;
 
@@ -66,6 +68,8 @@ define module protocol-buffers-impl
     <boolean-token>,
     <comment-token>,
     <whitespace-token>,
+    token-column,
+    token-line,
     token-text,
     token-value,
     read-token,
