@@ -1,5 +1,5 @@
 Module: protocol-buffers-impl
-Synopsis: Ad-hoc, recursive descent parser for .proto Interface Definition Language
+Synopsis: Ad-hoc lexer and parser for .proto Interface Definition Language
 
 // References used while writing this parser:
 // * https://protobuf.dev/reference/protobuf/proto2-spec/
@@ -357,7 +357,11 @@ define function read-identifier-or-reserved-word
     end;
   end;
   let text = as(<string>, identifier);
-  if (reserved-word?(text))
+  if (text = "true")
+    make(<boolean-token>, text: text, value: #t)
+  elseif (text = "false")
+    make(<boolean-token>, text: text, value: #f)
+  elseif (reserved-word?(text))
     make(<reserved-word-token>, text: text, value: as(<symbol>, text))
   else
     make(<identifier-token>, text: text, value: text)
@@ -779,7 +783,7 @@ define function parse-enum-value-options
   iterate loop (token = next-token(parser))
     if (~token | token.token-value ~== '}')
       expect-token(parser, "=");
-      let value = expect-token(parser, #("true", "false"));
+      let value = expect-token(parser, <boolean-token>);
       select (token.token-text by \=)
         "deprecated" =>
           enum-value-options-deprecated(options)
@@ -815,8 +819,8 @@ end function;
 
 define function parse-message-field
     (parser :: <parser>, file :: <file-descriptor-proto>,
-     #key label :: false-or(<token>), // if provided, parsing a proto2 field
-          type :: false-or(<token>))  // if provided, parsing a proto3 field
+     #key label :: false-or(<token>), // if provided, this is a proto2 field
+          type :: false-or(<token>))  // if provided, this is a proto3 field
  => (field :: <field-descriptor-proto>)
   let type = type | next-token(parser);
   // TODO: field types that are fully qualified names. skipping for now since
@@ -847,17 +851,11 @@ define function parse-message-field
                         #"required" => $field-descriptor-proto-label-label-required;
                         #"optional" => $field-descriptor-proto-label-label-optional;
                       end,
-       default-value: default,
-       // TODO: for built-in types (bool, int32, etc) this is easy
-       // but if `type` names a message, enum, or group then I
-       // think we need a second pass to fill it in because it
-       // could be a forward reference. Also... we don't have to set this.
-       //type: enum-field-from-name(<field-descriptor-proto-type>,
-       //                           concat("TYPE_", uppercase(type.token-text)))
-       //        | ...?
+       default-value: default,  // a string
+       // type: We just use type-name and don't bother with the type field.
        type-name: type.token-text,
        options: options,
-       // TODO: what about syntax = editions?
+       // TODO: what about syntax = "2024"?
        proto3-optional:
          label
          & label.token-text = "optional"
@@ -867,7 +865,8 @@ end function parse-message-field;
 // TODO: For now this is just enough to handle the set of options used in
 // descriptor.proto: default, deprecated, and packed.
 define function parse-field-options
-    (parser :: <parser>) => (default, options :: <field-options>)
+    (parser :: <parser>)
+ => (default :: false-or(<string>), options :: <field-options>)
   let default = #f;
   let options = make(<field-options>);
   iterate loop (token = next-token(parser))
@@ -880,7 +879,7 @@ define function parse-field-options
         "deprecated" =>
           field-options-deprecated(options) := token-value(value);
         "default" =>
-          default := token-text(value);
+          default := token-value(value);
         // TODO: handle more well-known options.
         otherwise =>
           // TODO: store in uninterpreted-option slot.
@@ -892,5 +891,5 @@ define function parse-field-options
       end;
     end if;
   end iterate;
-  values(default, options)
+  values(sformat("%=", default), options)
 end function;

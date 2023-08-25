@@ -34,7 +34,8 @@ define function main
   let file-descriptor = parse-file(path);
   // TODO: set up output streams in generator.
   // TODO: generate library name
-  let generator = make(<generator>);
+  let generator = make(<generator>,
+                       syntax: file-descriptor-proto-syntax(file-descriptor));
   generate-dylan-code(generator, file-descriptor);
   exit-application(0);
 end function;

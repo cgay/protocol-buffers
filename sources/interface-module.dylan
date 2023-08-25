@@ -10,5 +10,5 @@ define module protocol-buffers
     <protocol-buffer-enum>,
 
     // Types
-    <int32>, <uint32>;
+    <int32>, <uint32>, <int64>, <uint64>;
 end module;

@@ -22,6 +22,8 @@ define class <generator> (<object>)
     init-keyword: library-name:;
   constant slot module-name :: false-or(<string>) = #f,
     init-keyword: module-name:;
+  constant slot proto-syntax :: <string>,
+    required-init-keyword: syntax:;
 end class;
 
 // Exported
@@ -99,16 +101,17 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
   let camel-name = field-descriptor-proto-name(field);
   let field-name = dylan-name(camel-name);
   let getter = dylan-name(camel-name, parent: parent);
-  let slot-type = "<object>";
-  // TODO: type field not filled in by parser yet.
-  //    = dylan-type-name(field-descriptor-proto-type(field), parent: parent);
-  //debug("field-descriptor-proto-type(field) => %=", field-descriptor-proto-type(field));
+  let (dylan-type-name :: <string>,
+       default-for-type :: <string>)
+    = dylan-type-name(proto-syntax(gen),
+                      field-descriptor-proto-type-name(field));
+  debug("dylan-type-name: %=, default-for-type: %=", dylan-type-name, default-for-type);
   export(gen, getter);
   export(gen, concat(getter, "-setter"));
   code(gen, """  slot %s :: %s,
-    init-value: #f,
+    init-value: %s,
     init-keyword: %s:;\n""",
-       getter, slot-type, field-name);
+       getter, dylan-type-name, default-for-type, field-name);
 end method;
 
 define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
@@ -220,27 +223,41 @@ end function;
 
 // `parent` should already have been run through camel-to-kebob.
 define function dylan-type-name
-    (proto-type :: <string>, #key parent) => (dylan-type :: <string>)
-  select (proto-type by \=)
-    "double" => "<double-float>";
-    "float"  => "<single-float>";
-    "int32"  => "<int32>";
-    "int64"  => "<int64>";
-    "uint32" => "<uint32>";
-    "uint64" => "<uint64>";
-    "sint32" => "<sint32>";
-    "sint64" => "<sint64>";
-    "fixed32" => "<fixed32>";
-    "fixed64" => "<fixed64>";
-    "sfixed32" => "<sfixed32>";
-    "sfixed64" => "<sfixed64>";
-    "bool" => "<boolean>";
-    "string" => "<string>";
-    "bytes" => "<byte-vector>";
-    otherwise =>
-      // Assume it's a derived message or enum type.
-      dylan-class-name(proto-type, parent: parent)
-  end select
+    (syntax :: <string>, proto-type :: <string>, #key parent)
+ => (dylan-type :: <string>, default :: <string>)
+  debug("=> dylan-type(%=, %=)", syntax, proto-type);
+  let (type-name, default)
+    = select (proto-type by \=)
+        "double" => values("<double-float>", "0.0d0");
+        "float"  => values("<single-float>", "0.0");
+        "int32"  => values("<int32>", "0");
+        "int64"  => values("<int64>", "0");
+        "uint32" => values("<uint32>", "0");
+        "uint64" => values("<uint64>", "0");
+        "sint32" => values("<sint32>", "0");
+        "sint64" => values("<sint64>", "0");
+        "fixed32" => values("<fixed32>", "0");
+        "fixed64" => values("<fixed64>", "0");
+        "sfixed32" => values("<sfixed32>", "0");
+        "sfixed64" => values("<sfixed64>", "0");
+        "bool" => values("<boolean>", "#f");
+        "string" => values("<string>", "");
+        "bytes" => values("<byte-vector>", "make(<byte-vector>, size: 0)");
+        otherwise =>
+          // TODO: message-typed, map-typed, enum-typed fields
+          values("<object>", "#f");
+      end select;
+  if (syntax = "proto2")
+    // TODO: for now there is no way to detect whether a bool field is set.
+    values(iff(proto-type = "bool",
+               "<boolean>",
+               iff(type-name = "<object>",
+                   type-name,
+                   sformat("false-or(%s)", type-name))),
+           "#f")
+  else
+    values(type-name, default)
+  end
 end function;
 
 // Convert `camel` from CamelCase to kebob-case.

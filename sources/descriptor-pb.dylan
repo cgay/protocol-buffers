@@ -7,19 +7,19 @@ define class <file-descriptor-set> (<protocol-buffer-message>)
 end class <file-descriptor-set>;
 
 define class <file-descriptor-proto> (<protocol-buffer-message>)
-  slot file-descriptor-proto-name :: <object>,
+  slot file-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot file-descriptor-proto-package :: <object>,
+  slot file-descriptor-proto-package :: false-or(<string>),
     init-value: #f,
     init-keyword: package:;
-  slot file-descriptor-proto-dependency :: <object>,
+  slot file-descriptor-proto-dependency :: false-or(<string>),
     init-value: #f,
     init-keyword: dependency:;
-  slot file-descriptor-proto-public-dependency :: <object>,
+  slot file-descriptor-proto-public-dependency :: false-or(<int32>),
     init-value: #f,
     init-keyword: public-dependency:;
-  slot file-descriptor-proto-weak-dependency :: <object>,
+  slot file-descriptor-proto-weak-dependency :: false-or(<int32>),
     init-value: #f,
     init-keyword: weak-dependency:;
   slot file-descriptor-proto-message-type :: <object>,
@@ -40,16 +40,16 @@ define class <file-descriptor-proto> (<protocol-buffer-message>)
   slot file-descriptor-proto-source-code-info :: <object>,
     init-value: #f,
     init-keyword: source-code-info:;
-  slot file-descriptor-proto-syntax :: <object>,
+  slot file-descriptor-proto-syntax :: false-or(<string>),
     init-value: #f,
     init-keyword: syntax:;
-  slot file-descriptor-proto-edition :: <object>,
+  slot file-descriptor-proto-edition :: false-or(<string>),
     init-value: #f,
     init-keyword: edition:;
 end class <file-descriptor-proto>;
 
 define class <descriptor-proto> (<protocol-buffer-message>)
-  slot descriptor-proto-name :: <object>,
+  slot descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
   slot descriptor-proto-field :: <object>,
@@ -76,16 +76,16 @@ define class <descriptor-proto> (<protocol-buffer-message>)
   slot descriptor-proto-reserved-range :: <object>,
     init-value: #f,
     init-keyword: reserved-range:;
-  slot descriptor-proto-reserved-name :: <object>,
+  slot descriptor-proto-reserved-name :: false-or(<string>),
     init-value: #f,
     init-keyword: reserved-name:;
 end class <descriptor-proto>;
 
 define class <descriptor-proto-extension-range> (<protocol-buffer-message>)
-  slot descriptor-proto-extension-range-start :: <object>,
+  slot descriptor-proto-extension-range-start :: false-or(<int32>),
     init-value: #f,
     init-keyword: start:;
-  slot descriptor-proto-extension-range-end :: <object>,
+  slot descriptor-proto-extension-range-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;
   slot descriptor-proto-extension-range-options :: <object>,
@@ -94,10 +94,10 @@ define class <descriptor-proto-extension-range> (<protocol-buffer-message>)
 end class <descriptor-proto-extension-range>;
 
 define class <descriptor-proto-reserved-range> (<protocol-buffer-message>)
-  slot descriptor-proto-reserved-range-start :: <object>,
+  slot descriptor-proto-reserved-range-start :: false-or(<int32>),
     init-value: #f,
     init-keyword: start:;
-  slot descriptor-proto-reserved-range-end :: <object>,
+  slot descriptor-proto-reserved-range-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;
 end class <descriptor-proto-reserved-range>;
@@ -109,10 +109,10 @@ define class <extension-range-options> (<protocol-buffer-message>)
 end class <extension-range-options>;
 
 define class <field-descriptor-proto> (<protocol-buffer-message>)
-  slot field-descriptor-proto-name :: <object>,
+  slot field-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot field-descriptor-proto-number :: <object>,
+  slot field-descriptor-proto-number :: false-or(<int32>),
     init-value: #f,
     init-keyword: number:;
   slot field-descriptor-proto-label :: <object>,
@@ -121,25 +121,25 @@ define class <field-descriptor-proto> (<protocol-buffer-message>)
   slot field-descriptor-proto-type :: <object>,
     init-value: #f,
     init-keyword: type:;
-  slot field-descriptor-proto-type-name :: <object>,
+  slot field-descriptor-proto-type-name :: false-or(<string>),
     init-value: #f,
     init-keyword: type-name:;
-  slot field-descriptor-proto-extendee :: <object>,
+  slot field-descriptor-proto-extendee :: false-or(<string>),
     init-value: #f,
     init-keyword: extendee:;
-  slot field-descriptor-proto-default-value :: <object>,
+  slot field-descriptor-proto-default-value :: false-or(<string>),
     init-value: #f,
     init-keyword: default-value:;
-  slot field-descriptor-proto-oneof-index :: <object>,
+  slot field-descriptor-proto-oneof-index :: false-or(<int32>),
     init-value: #f,
     init-keyword: oneof-index:;
-  slot field-descriptor-proto-json-name :: <object>,
+  slot field-descriptor-proto-json-name :: false-or(<string>),
     init-value: #f,
     init-keyword: json-name:;
   slot field-descriptor-proto-options :: <object>,
     init-value: #f,
     init-keyword: options:;
-  slot field-descriptor-proto-proto3-optional :: <object>,
+  slot field-descriptor-proto-proto3-optional :: <boolean>,
     init-value: #f,
     init-keyword: proto3-optional:;
 end class <field-descriptor-proto>;
@@ -235,7 +235,7 @@ define constant $field-descriptor-proto-label-label-repeated :: <object>
          value: 3);
 
 define class <oneof-descriptor-proto> (<protocol-buffer-message>)
-  slot oneof-descriptor-proto-name :: <object>,
+  slot oneof-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
   slot oneof-descriptor-proto-options :: <object>,
@@ -244,7 +244,7 @@ define class <oneof-descriptor-proto> (<protocol-buffer-message>)
 end class <oneof-descriptor-proto>;
 
 define class <enum-descriptor-proto> (<protocol-buffer-message>)
-  slot enum-descriptor-proto-name :: <object>,
+  slot enum-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
   slot enum-descriptor-proto-value :: <object>,
@@ -256,25 +256,25 @@ define class <enum-descriptor-proto> (<protocol-buffer-message>)
   slot enum-descriptor-proto-reserved-range :: <object>,
     init-value: #f,
     init-keyword: reserved-range:;
-  slot enum-descriptor-proto-reserved-name :: <object>,
+  slot enum-descriptor-proto-reserved-name :: false-or(<string>),
     init-value: #f,
     init-keyword: reserved-name:;
 end class <enum-descriptor-proto>;
 
 define class <enum-descriptor-proto-enum-reserved-range> (<protocol-buffer-message>)
-  slot enum-descriptor-proto-enum-reserved-range-start :: <object>,
+  slot enum-descriptor-proto-enum-reserved-range-start :: false-or(<int32>),
     init-value: #f,
     init-keyword: start:;
-  slot enum-descriptor-proto-enum-reserved-range-end :: <object>,
+  slot enum-descriptor-proto-enum-reserved-range-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;
 end class <enum-descriptor-proto-enum-reserved-range>;
 
 define class <enum-value-descriptor-proto> (<protocol-buffer-message>)
-  slot enum-value-descriptor-proto-name :: <object>,
+  slot enum-value-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot enum-value-descriptor-proto-number :: <object>,
+  slot enum-value-descriptor-proto-number :: false-or(<int32>),
     init-value: #f,
     init-keyword: number:;
   slot enum-value-descriptor-proto-options :: <object>,
@@ -283,7 +283,7 @@ define class <enum-value-descriptor-proto> (<protocol-buffer-message>)
 end class <enum-value-descriptor-proto>;
 
 define class <service-descriptor-proto> (<protocol-buffer-message>)
-  slot service-descriptor-proto-name :: <object>,
+  slot service-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
   slot service-descriptor-proto-method :: <object>,
@@ -295,85 +295,85 @@ define class <service-descriptor-proto> (<protocol-buffer-message>)
 end class <service-descriptor-proto>;
 
 define class <method-descriptor-proto> (<protocol-buffer-message>)
-  slot method-descriptor-proto-name :: <object>,
+  slot method-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot method-descriptor-proto-input-type :: <object>,
+  slot method-descriptor-proto-input-type :: false-or(<string>),
     init-value: #f,
     init-keyword: input-type:;
-  slot method-descriptor-proto-output-type :: <object>,
+  slot method-descriptor-proto-output-type :: false-or(<string>),
     init-value: #f,
     init-keyword: output-type:;
   slot method-descriptor-proto-options :: <object>,
     init-value: #f,
     init-keyword: options:;
-  slot method-descriptor-proto-client-streaming :: <object>,
+  slot method-descriptor-proto-client-streaming :: <boolean>,
     init-value: #f,
     init-keyword: client-streaming:;
-  slot method-descriptor-proto-server-streaming :: <object>,
+  slot method-descriptor-proto-server-streaming :: <boolean>,
     init-value: #f,
     init-keyword: server-streaming:;
 end class <method-descriptor-proto>;
 
 define class <file-options> (<protocol-buffer-message>)
-  slot file-options-java-package :: <object>,
+  slot file-options-java-package :: false-or(<string>),
     init-value: #f,
     init-keyword: java-package:;
-  slot file-options-java-outer-classname :: <object>,
+  slot file-options-java-outer-classname :: false-or(<string>),
     init-value: #f,
     init-keyword: java-outer-classname:;
-  slot file-options-java-multiple-files :: <object>,
+  slot file-options-java-multiple-files :: <boolean>,
     init-value: #f,
     init-keyword: java-multiple-files:;
-  slot file-options-java-generate-equals-and-hash :: <object>,
+  slot file-options-java-generate-equals-and-hash :: <boolean>,
     init-value: #f,
     init-keyword: java-generate-equals-and-hash:;
-  slot file-options-java-string-check-utf8 :: <object>,
+  slot file-options-java-string-check-utf8 :: <boolean>,
     init-value: #f,
     init-keyword: java-string-check-utf8:;
   slot file-options-optimize-for :: <object>,
     init-value: #f,
     init-keyword: optimize-for:;
-  slot file-options-go-package :: <object>,
+  slot file-options-go-package :: false-or(<string>),
     init-value: #f,
     init-keyword: go-package:;
-  slot file-options-cc-generic-services :: <object>,
+  slot file-options-cc-generic-services :: <boolean>,
     init-value: #f,
     init-keyword: cc-generic-services:;
-  slot file-options-java-generic-services :: <object>,
+  slot file-options-java-generic-services :: <boolean>,
     init-value: #f,
     init-keyword: java-generic-services:;
-  slot file-options-py-generic-services :: <object>,
+  slot file-options-py-generic-services :: <boolean>,
     init-value: #f,
     init-keyword: py-generic-services:;
-  slot file-options-php-generic-services :: <object>,
+  slot file-options-php-generic-services :: <boolean>,
     init-value: #f,
     init-keyword: php-generic-services:;
-  slot file-options-deprecated :: <object>,
+  slot file-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot file-options-cc-enable-arenas :: <object>,
+  slot file-options-cc-enable-arenas :: <boolean>,
     init-value: #f,
     init-keyword: cc-enable-arenas:;
-  slot file-options-objc-class-prefix :: <object>,
+  slot file-options-objc-class-prefix :: false-or(<string>),
     init-value: #f,
     init-keyword: objc-class-prefix:;
-  slot file-options-csharp-namespace :: <object>,
+  slot file-options-csharp-namespace :: false-or(<string>),
     init-value: #f,
     init-keyword: csharp-namespace:;
-  slot file-options-swift-prefix :: <object>,
+  slot file-options-swift-prefix :: false-or(<string>),
     init-value: #f,
     init-keyword: swift-prefix:;
-  slot file-options-php-class-prefix :: <object>,
+  slot file-options-php-class-prefix :: false-or(<string>),
     init-value: #f,
     init-keyword: php-class-prefix:;
-  slot file-options-php-namespace :: <object>,
+  slot file-options-php-namespace :: false-or(<string>),
     init-value: #f,
     init-keyword: php-namespace:;
-  slot file-options-php-metadata-namespace :: <object>,
+  slot file-options-php-metadata-namespace :: false-or(<string>),
     init-value: #f,
     init-keyword: php-metadata-namespace:;
-  slot file-options-ruby-package :: <object>,
+  slot file-options-ruby-package :: false-or(<string>),
     init-value: #f,
     init-keyword: ruby-package:;
   slot file-options-uninterpreted-option :: <object>,
@@ -397,16 +397,16 @@ define constant $file-options-optimize-mode-lite-runtime :: <object>
          value: 3);
 
 define class <message-options> (<protocol-buffer-message>)
-  slot message-options-message-set-wire-format :: <object>,
+  slot message-options-message-set-wire-format :: <boolean>,
     init-value: #f,
     init-keyword: message-set-wire-format:;
-  slot message-options-no-standard-descriptor-accessor :: <object>,
+  slot message-options-no-standard-descriptor-accessor :: <boolean>,
     init-value: #f,
     init-keyword: no-standard-descriptor-accessor:;
-  slot message-options-deprecated :: <object>,
+  slot message-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot message-options-map-entry :: <object>,
+  slot message-options-map-entry :: <boolean>,
     init-value: #f,
     init-keyword: map-entry:;
   slot message-options-uninterpreted-option :: <object>,
@@ -418,22 +418,22 @@ define class <field-options> (<protocol-buffer-message>)
   slot field-options-ctype :: <object>,
     init-value: #f,
     init-keyword: ctype:;
-  slot field-options-packed :: <object>,
+  slot field-options-packed :: <boolean>,
     init-value: #f,
     init-keyword: packed:;
   slot field-options-jstype :: <object>,
     init-value: #f,
     init-keyword: jstype:;
-  slot field-options-lazy :: <object>,
+  slot field-options-lazy :: <boolean>,
     init-value: #f,
     init-keyword: lazy:;
-  slot field-options-unverified-lazy :: <object>,
+  slot field-options-unverified-lazy :: <boolean>,
     init-value: #f,
     init-keyword: unverified-lazy:;
-  slot field-options-deprecated :: <object>,
+  slot field-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot field-options-weak :: <object>,
+  slot field-options-weak :: <boolean>,
     init-value: #f,
     init-keyword: weak:;
   slot field-options-uninterpreted-option :: <object>,
@@ -478,10 +478,10 @@ define class <oneof-options> (<protocol-buffer-message>)
 end class <oneof-options>;
 
 define class <enum-options> (<protocol-buffer-message>)
-  slot enum-options-allow-alias :: <object>,
+  slot enum-options-allow-alias :: <boolean>,
     init-value: #f,
     init-keyword: allow-alias:;
-  slot enum-options-deprecated :: <object>,
+  slot enum-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
   slot enum-options-uninterpreted-option :: <object>,
@@ -490,7 +490,7 @@ define class <enum-options> (<protocol-buffer-message>)
 end class <enum-options>;
 
 define class <enum-value-options> (<protocol-buffer-message>)
-  slot enum-value-options-deprecated :: <object>,
+  slot enum-value-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
   slot enum-value-options-uninterpreted-option :: <object>,
@@ -499,7 +499,7 @@ define class <enum-value-options> (<protocol-buffer-message>)
 end class <enum-value-options>;
 
 define class <service-options> (<protocol-buffer-message>)
-  slot service-options-deprecated :: <object>,
+  slot service-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
   slot service-options-uninterpreted-option :: <object>,
@@ -508,7 +508,7 @@ define class <service-options> (<protocol-buffer-message>)
 end class <service-options>;
 
 define class <method-options> (<protocol-buffer-message>)
-  slot method-options-deprecated :: <object>,
+  slot method-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
   slot method-options-idempotency-level :: <object>,
@@ -538,31 +538,31 @@ define class <uninterpreted-option> (<protocol-buffer-message>)
   slot uninterpreted-option-name :: <object>,
     init-value: #f,
     init-keyword: name:;
-  slot uninterpreted-option-identifier-value :: <object>,
+  slot uninterpreted-option-identifier-value :: false-or(<string>),
     init-value: #f,
     init-keyword: identifier-value:;
-  slot uninterpreted-option-positive-int-value :: <object>,
+  slot uninterpreted-option-positive-int-value :: false-or(<uint64>),
     init-value: #f,
     init-keyword: positive-int-value:;
-  slot uninterpreted-option-negative-int-value :: <object>,
+  slot uninterpreted-option-negative-int-value :: false-or(<int64>),
     init-value: #f,
     init-keyword: negative-int-value:;
-  slot uninterpreted-option-double-value :: <object>,
+  slot uninterpreted-option-double-value :: false-or(<double-float>),
     init-value: #f,
     init-keyword: double-value:;
-  slot uninterpreted-option-string-value :: <object>,
+  slot uninterpreted-option-string-value :: false-or(<byte-vector>),
     init-value: #f,
     init-keyword: string-value:;
-  slot uninterpreted-option-aggregate-value :: <object>,
+  slot uninterpreted-option-aggregate-value :: false-or(<string>),
     init-value: #f,
     init-keyword: aggregate-value:;
 end class <uninterpreted-option>;
 
 define class <uninterpreted-option-name-part> (<protocol-buffer-message>)
-  slot uninterpreted-option-name-part-name-part :: <object>,
+  slot uninterpreted-option-name-part-name-part :: false-or(<string>),
     init-value: #f,
     init-keyword: name-part:;
-  slot uninterpreted-option-name-part-is-extension :: <object>,
+  slot uninterpreted-option-name-part-is-extension :: <boolean>,
     init-value: #f,
     init-keyword: is-extension:;
 end class <uninterpreted-option-name-part>;
@@ -574,19 +574,19 @@ define class <source-code-info> (<protocol-buffer-message>)
 end class <source-code-info>;
 
 define class <source-code-info-location> (<protocol-buffer-message>)
-  slot source-code-info-location-path :: <object>,
+  slot source-code-info-location-path :: false-or(<int32>),
     init-value: #f,
     init-keyword: path:;
-  slot source-code-info-location-span :: <object>,
+  slot source-code-info-location-span :: false-or(<int32>),
     init-value: #f,
     init-keyword: span:;
-  slot source-code-info-location-leading-comments :: <object>,
+  slot source-code-info-location-leading-comments :: false-or(<string>),
     init-value: #f,
     init-keyword: leading-comments:;
-  slot source-code-info-location-trailing-comments :: <object>,
+  slot source-code-info-location-trailing-comments :: false-or(<string>),
     init-value: #f,
     init-keyword: trailing-comments:;
-  slot source-code-info-location-leading-detached-comments :: <object>,
+  slot source-code-info-location-leading-detached-comments :: false-or(<string>),
     init-value: #f,
     init-keyword: leading-detached-comments:;
 end class <source-code-info-location>;
@@ -598,16 +598,16 @@ define class <generated-code-info> (<protocol-buffer-message>)
 end class <generated-code-info>;
 
 define class <generated-code-info-annotation> (<protocol-buffer-message>)
-  slot generated-code-info-annotation-path :: <object>,
+  slot generated-code-info-annotation-path :: false-or(<int32>),
     init-value: #f,
     init-keyword: path:;
-  slot generated-code-info-annotation-source-file :: <object>,
+  slot generated-code-info-annotation-source-file :: false-or(<string>),
     init-value: #f,
     init-keyword: source-file:;
-  slot generated-code-info-annotation-begin :: <object>,
+  slot generated-code-info-annotation-begin :: false-or(<int32>),
     init-value: #f,
     init-keyword: begin:;
-  slot generated-code-info-annotation-end :: <object>,
+  slot generated-code-info-annotation-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;
   slot generated-code-info-annotation-semantic :: <object>,
