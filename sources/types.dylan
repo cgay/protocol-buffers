@@ -2,7 +2,20 @@ Module: protocol-buffers-impl
 
 // The root of the type hierarchy for generated code objects.
 define sealed abstract class <protocol-buffer-object> (<object>)
+  // Tracking the parent descriptor makes it possible for the code generator to
+  // determine the full Dylan name, which is based on the path from file level
+  // to the message/enum definition. FileDescriptorSet has no
+  // parent. FileDescriptorProto may or may not have a parent. Messages, enums,
+  // fields, etc. always have a parent.
+  slot descriptor-parent :: false-or(<protocol-buffer-object>) = #f,
+    init-keyword: parent:;
 end class;
+
+// Returns the original proto IDL name (in camelCase) of a descriptor.  This
+// just makes it so we don't have to figure out everywhere whether to call
+// file-descriptor-proto-name, descriptor-proto-name, et al.
+define open generic descriptor-name
+    (descriptor :: <protocol-buffer-object>) => (name :: <string>);
 
 // Superclass of all generated protocol buffer messages.
 define open abstract class <protocol-buffer-message> (<protocol-buffer-object>)
@@ -30,6 +43,7 @@ ignore(%boolean-field-bits,
        %field-is-set, %field-is-set-setter);
 
 // Superclass of all generated protocol buffer enums.
+
 define open abstract class <protocol-buffer-enum> (<protocol-buffer-object>)
   constant slot enum-value-name :: <string>,
     required-init-keyword: name:;

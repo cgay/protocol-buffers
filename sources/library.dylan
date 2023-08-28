@@ -17,7 +17,7 @@ define library protocol-buffers
               uncommon-utils };
 
   export
-    google-protobuf,
     protocol-buffers,
-    protocol-buffers-impl;
+    protocol-buffers-impl,
+    google-protobuf;            // descriptor.proto generated code
 end library;

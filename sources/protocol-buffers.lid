@@ -5,6 +5,7 @@ Files: library.dylan
        implementation-module.dylan
        64-bit.dylan
        descriptor-pb.dylan
+       descriptor.dylan
        utilities.dylan
        types.dylan
        wire-format.dylan

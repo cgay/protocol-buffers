@@ -185,9 +185,9 @@ define function read-token-1
     otherwise =>
       // According to the spec, identifiers must start with a letter, but
       // unit tests in Google's protobuf repo assume that leading
-      // underscore is valid so...
-      if (char == '_' | alphabetic?(char))
-        read-identifier-or-reserved-word(lex)
+      // underscore is valid so....  '.' is for fully qualified identifiers.
+      if (char == '_' | char == '.' | alphabetic?(char))
+        read-qualified-identifier-or-reserved-word(lex)
       else
         lex-error(lex, "unexpected character: %c", char);
       end;
@@ -345,15 +345,18 @@ define function read-numeric-literal
   end
 end function read-numeric-literal;
 
-// EBNF: ident = letter { letter | decimalDigit | "_" }
-define function read-identifier-or-reserved-word
+// "string", "_foo, "Foo", "Foo.bar", ".Foo.Bar"
+// Leading '_' is allowed due to its presence in Google's unit tests.
+define function read-qualified-identifier-or-reserved-word
     (lex :: <lexer>) => (token :: <token>)
-  // Caller already confirmed the peeked char is a letter.
   let identifier = make(<stretchy-vector>);
-  iterate loop (ch = peek-char(lex))
-    if (ch & (ch == '_' | alphanumeric?(ch)))
+  iterate loop (ch = peek-char(lex), prev = #f)
+    if (ch & (ch == '_' | ch == '.' | alphanumeric?(ch)))
+      if (ch == '.' & prev == '.')
+        lex-error(lex, "qualified names may not contain consecutive '.' characters");
+      end;
       add!(identifier, consume-char(lex));
-      loop(peek-char(lex))
+      loop(peek-char(lex), ch)
     end;
   end;
   let text = as(<string>, identifier);
@@ -544,12 +547,6 @@ end function;
 //// Parser
 ////
 
-// This is a temporary parser and Dylan code generator that operates directly
-// on the IDL token stream. The plan is to eventually generate a <descriptor>
-// instance for each message, enum, etc and emit those and generate Dylan code
-// from that. This one is for bootstrapping the descriptor code by parsing
-// descriptor.proto.
-
 define class <parse-error> (<protocol-buffer-error>) end;
 
 define function parse-error
@@ -588,7 +585,9 @@ define method expect-token (parser :: <parser>, strings :: <seq>) => (token :: <
   let token = next-token(parser);
   if (~member?(token.token-text, strings, test: \=))
     parse-error("expected token %s but got %=",
-                join(strings, ", ", conjunction: " or "),
+                join(strings, ", ",
+                     key: method (s) sformat("%=", s) end,
+                     conjunction: " or "),
                 sformat("%=", token));
   end;
   token
@@ -651,7 +650,7 @@ end function;
 
 // TODO: see if option parsers can share code.
 define function parse-file-option
-    (parser :: <parser>, file-descriptor :: <file-descriptor-proto>) => ()
+    (parser :: <parser>, file :: <file-descriptor-proto>) => ()
   let option-name = expect-token(parser, <identifier-token>);
   expect-token(parser, "=");
   // TODO: finish option parsing. We don't care about most of the FileOptions
@@ -671,16 +670,17 @@ define function parse-message
   let messages = make(<stretchy-vector>);
   let enums    = make(<stretchy-vector>);
   let options  = make(<stretchy-vector>);
+  let syntax   = file-descriptor-proto-syntax(file);
   block (done)
     while (#t)
       let token = parser.next-token;
       select (token.token-value)
         #"repeated", #"optional", #"required" =>
-          add!(fields, parse-message-field(parser, file, label: token));
+          add!(fields, parse-message-field(parser, syntax, label: token));
         #"map", #"double", #"float", #"int32", #"int64", #"uint32", #"uint64",
         #"sint32", #"sint64", #"fixed32", #"fixed64", #"sfixed32", #"sfixed64",
         #"bool", #"string", #"bytes" =>
-          add!(fields, parse-message-field(parser, file, type: token));
+          add!(fields, parse-message-field(parser, syntax, type: token));
         #"group" =>
           discard-statement(parser); // TODO: parse-group(parser);
         #"oneof" =>
@@ -704,7 +704,7 @@ define function parse-message
         otherwise =>
           if (instance?(token, <identifier-token>))
             // Looking at a proto3 message-, enum-, or group-typed field.
-            add!(fields, parse-message-field(parser, file, type: token));
+            add!(fields, parse-message-field(parser, syntax, type: token));
           else
             parse-error("unexpected message element starting with %s",
                         sformat("%=", token));
@@ -712,17 +712,29 @@ define function parse-message
       end select;
     end while;
   end block;
-  make(<descriptor-proto>,
-       name: name,
-       field: fields,
-       nested-type: messages,   // This slot seems badly named in descriptor.proto?
-       enum-type: enums
-       // TODO: rest of the fields...
-       )
+  let message
+    = make(<descriptor-proto>,
+           name: name,
+           field: fields,
+           nested-type: messages,
+           enum-type: enums
+             // TODO: rest of the fields...
+             );
+  for (field in fields)
+    field.descriptor-parent := message;
+  end;
+  for (child in messages)
+    child.descriptor-parent := message;
+  end;
+  for (enum in enums)
+    enum.descriptor-parent := message;
+  end;
+  message
 end function;
 
 define function parse-enum
-    (parser :: <parser>, parent-names :: <list>) => (enum :: <enum-descriptor-proto>)
+    (parser :: <parser>, parent-names :: <list>)
+ => (enum :: <enum-descriptor-proto>)
   let name-token = next-token(parser);
   let name = name-token.token-text;
   let name-path = pair(name, parent-names);
@@ -747,12 +759,17 @@ define function parse-enum
   fields.size > 0
     | parse-error("enum %= must have at least one enum value",
                   join(reverse!(name-path), "."));
-  make(<enum-descriptor-proto>,
-       name: name,
-       value: fields,
-       options: options,
-       reserved-name: #f,       // TODO
-       reserved-range: #f)      // TODO
+  let enum
+    = make(<enum-descriptor-proto>,
+           name: name,
+           value: fields,
+           options: options,
+           reserved-name: #f,       // TODO
+           reserved-range: #f);     // TODO
+  for (field in fields)
+    field.descriptor-parent := enum;
+  end;
+  enum
 end function;
 
 define function parse-enum-field
@@ -770,10 +787,13 @@ define function parse-enum-field
   if ('[' == token-value(expect-token(parser, #(";", "["))))
     options := parse-enum-value-options(parser);
   end;
-  make(<enum-value-descriptor-proto>,
-       name: name.token-text,
-       number: number.token-value,
-       options: options)
+  let enum-value
+    = make(<enum-value-descriptor-proto>,
+           name: name.token-text,
+           number: number.token-value,
+           options: options);
+  options & (options.descriptor-parent := enum-value);
+  enum-value
 end function;
 
 // TODO: this is the bare minimum to parse descriptor.proto
@@ -818,7 +838,7 @@ define function parse-qualified-identifier
 end function;
 
 define function parse-message-field
-    (parser :: <parser>, file :: <file-descriptor-proto>,
+    (parser :: <parser>, syntax :: <string>,
      #key label :: false-or(<token>), // if provided, this is a proto2 field
           type :: false-or(<token>))  // if provided, this is a proto3 field
  => (field :: <field-descriptor-proto>)
@@ -843,23 +863,24 @@ define function parse-message-field
     default := d;
     options := o;
   end;
-  make(<field-descriptor-proto>,
-       name: name.token-text,
-       number: number.token-value,
-       label: label & select (label.token-value)
-                        #"repeated" => $field-descriptor-proto-label-label-repeated;
-                        #"required" => $field-descriptor-proto-label-label-required;
-                        #"optional" => $field-descriptor-proto-label-label-optional;
-                      end,
-       default-value: default,  // a string
-       // type: We just use type-name and don't bother with the type field.
-       type-name: type.token-text,
-       options: options,
-       // TODO: what about syntax = "2024"?
-       proto3-optional:
-         label
-         & label.token-text = "optional"
-         & file-descriptor-proto-syntax(file) = "proto3")
+  let field
+    = make(<field-descriptor-proto>,
+           name: name.token-text,
+           number: number.token-value,
+           label: label & select (label.token-value)
+                            #"repeated" => $field-descriptor-proto-label-label-repeated;
+                            #"required" => $field-descriptor-proto-label-label-required;
+                            #"optional" => $field-descriptor-proto-label-label-optional;
+                          end,
+           default-value: default,  // a string
+           // type: We just use type-name and don't bother with the type field.
+           type-name: type.token-text,
+           options: options,
+           // TODO: what about syntax = "2024"?
+           proto3-optional:
+             label & label.token-text = "optional" & syntax = "proto3");
+  options & (options.descriptor-parent := field);
+  field
 end function parse-message-field;
 
 // TODO: For now this is just enough to handle the set of options used in

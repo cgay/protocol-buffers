@@ -8,6 +8,9 @@ define module protocol-buffers
     <protocol-buffer-object>,
     <protocol-buffer-message>,
     <protocol-buffer-enum>,
+    descriptor-name,
+    enum-value,
+    enum-value-name,
 
     // Types
     <int32>, <uint32>, <int64>, <uint64>;

@@ -33,7 +33,7 @@ define function generate-dylan-code
 end function;
 
 // Emit code for an object. Each emit method should end its output with \n.
-// Note that many methods accept a parent: keyword argument. It should
+// Note that some methods accept a parent: keyword argument. It should
 // be the fully-qualified Dylan name of the parent, without any adornments
 // like "$" or "<...>".
 define generic emit
@@ -56,23 +56,28 @@ define method emit
   error("file sets not yet implemented");
 end method;
 
+// The current file being processed, for looking up qualified names.
+define thread variable *file-descriptor-proto* :: false-or(<file-descriptor-proto>) = #f;
+
 define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
-  debug("emit(<generator>, <file-descriptor-proto>)");
-  code(gen, "Module: %s\n\n", dylan-module-name(gen, file));
-  for (enum in file-descriptor-proto-enum-type(file) | #[])
-    emit(gen, enum);
+  debug("emit(<generator>, <file-descriptor-proto>) %=", file.file-descriptor-proto-name);
+  dynamic-bind (*file-descriptor-proto* = file)
+    code(gen, "Module: %s\n\n", dylan-module-name(gen, file));
+    for (enum in file-descriptor-proto-enum-type(file) | #[])
+      emit(gen, enum);
+    end;
+    for (message in file-descriptor-proto-message-type(file) | #[])
+      emit(gen, message);
+    end;
+    emit-module-definition(gen, file);
   end;
-  for (message in file-descriptor-proto-message-type(file) | #[])
-    emit(gen, message);
-  end;
-  emit-module-definition(gen, file);
 end method;
 
+// `parent` is provided if this is a nested message.
 define method emit (gen :: <generator>, message :: <descriptor-proto>,
                     #key parent)
-  debug("emit(<generator>, <descriptor-proto>, parent: %=)", parent);
+  debug("emit(<generator>, <descriptor-proto>, parent: %=) %=", parent, message.descriptor-proto-name);
   let camel-name = descriptor-proto-name(message);
-  let local-name = dylan-name(camel-name);
   let full-name = dylan-name(camel-name, parent: parent);
   let class-name = concat("<", full-name, ">");
 
@@ -80,7 +85,7 @@ define method emit (gen :: <generator>, message :: <descriptor-proto>,
   export(gen, class-name);
   code(gen, "define class %s (<protocol-buffer-message>)\n", class-name);
   for (field in descriptor-proto-field(message) | #[])
-    emit(gen, field, parent: full-name)
+    emit(gen, field, message: message, message-name: full-name);
   end;
   code(gen, "end class %s;\n\n", class-name);
 
@@ -96,27 +101,27 @@ define method emit (gen :: <generator>, message :: <descriptor-proto>,
 end method;
 
 define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
-                    #key parent :: <string>)
-  debug("emit(<generator>, <field-descriptor-proto>, parent: %=)", parent);
+                    #key message :: <descriptor-proto>, message-name :: <string>)
+  debug("emit(<generator>, <field-descriptor-proto>, message-name: %=) %=",
+        message-name, field.field-descriptor-proto-name);
   let camel-name = field-descriptor-proto-name(field);
-  let field-name = dylan-name(camel-name);
-  let getter = dylan-name(camel-name, parent: parent);
+  let local-name = dylan-name(camel-name);
+  let getter = dylan-name(camel-name, parent: message-name);
   let (dylan-type-name :: <string>,
        default-for-type :: <string>)
-    = dylan-type-name(proto-syntax(gen),
-                      field-descriptor-proto-type-name(field));
-  debug("dylan-type-name: %=, default-for-type: %=", dylan-type-name, default-for-type);
+    = dylan-slot-type(proto-syntax(gen), *file-descriptor-proto*, message, field);
+  debug("<= dylan-slot-type: %=, default-for-type: %=", dylan-type-name, default-for-type);
   export(gen, getter);
   export(gen, concat(getter, "-setter"));
   code(gen, """  slot %s :: %s,
     init-value: %s,
     init-keyword: %s:;\n""",
-       getter, dylan-type-name, default-for-type, field-name);
+       getter, dylan-type-name, default-for-type, local-name);
 end method;
 
 define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
                     #key parent)
-  debug("emit(<generator>, <enum-descriptor-proto>, parent: %=)", parent);
+  debug("emit(<generator>, <enum-descriptor-proto>, parent: %=) %=", parent, enum.enum-descriptor-proto-name);
   let camel-name = enum-descriptor-proto-name(enum);
   let local-name = dylan-name(camel-name);
   let full-name = dylan-name(camel-name, parent: parent);
@@ -127,7 +132,6 @@ define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
   // inherited from the superclass.
   code(gen, "define class %s (<protocol-buffer-enum>) end;\n\n", class-name);
   for (enum-value in enum-descriptor-proto-value(enum))
-    debug("about to emit enum-value: %=", enum-value-descriptor-proto-name(enum-value));
     emit(gen, enum-value, parent: full-name)
   end;
   code(gen, "\n");
@@ -135,7 +139,7 @@ end method;
 
 define method emit (gen :: <generator>, enum-value :: <enum-value-descriptor-proto>,
                     #key parent :: <string>)
-  debug("emit(<generator>, <enum-value-descriptor-proto>, parent: %=)", parent);
+  debug("emit(<generator>, <enum-value-descriptor-proto>, parent: %=) %=", parent, enum-value.enum-value-descriptor-proto-name);
   let camel-name = enum-value-descriptor-proto-name(enum-value);
   let constant-name = concat("$", dylan-name(camel-name, parent: parent));
   let value-type-name = "<object>"; // TODO
@@ -151,7 +155,7 @@ end method;
 
 define method emit (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
                     #key parent)
-  debug("emit(<generator>, <oneof-descriptor-proto>, parent: %=)", parent);
+  debug("emit(<generator>, <oneof-descriptor-proto>, parent: %=) %=", parent, oneof.oneof-descriptor-proto-name);
   let name = dylan-name(oneof-descriptor-proto-name(oneof), parent: parent);
 end method;
 
@@ -215,49 +219,137 @@ end function;
 // `parent` should already have been run through camel-to-kebob.
 define function dylan-class-name
     (camel :: <string>, #key parent) => (dylan-name :: <string>)
-  let kebob = camel-to-kebob(camel);
   concat("<",
-         iff(parent, concat(parent, "-", kebob), kebob),
+         dylan-name(camel, parent: parent),
          ">")
 end function;
 
-// `parent` should already have been run through camel-to-kebob.
-define function dylan-type-name
-    (syntax :: <string>, proto-type :: <string>, #key parent)
+// Determine the Dylan slot type and default value for a proto field.
+define function dylan-slot-type
+    (syntax :: <string>, file :: <file-descriptor-proto>, message :: <descriptor-proto>,
+     field :: <field-descriptor-proto>)
  => (dylan-type :: <string>, default :: <string>)
-  debug("=> dylan-type(%=, %=)", syntax, proto-type);
-  let (type-name, default)
-    = select (proto-type by \=)
-        "double" => values("<double-float>", "0.0d0");
-        "float"  => values("<single-float>", "0.0");
-        "int32"  => values("<int32>", "0");
-        "int64"  => values("<int64>", "0");
-        "uint32" => values("<uint32>", "0");
-        "uint64" => values("<uint64>", "0");
-        "sint32" => values("<sint32>", "0");
-        "sint64" => values("<sint64>", "0");
-        "fixed32" => values("<fixed32>", "0");
-        "fixed64" => values("<fixed64>", "0");
-        "sfixed32" => values("<sfixed32>", "0");
-        "sfixed64" => values("<sfixed64>", "0");
-        "bool" => values("<boolean>", "#f");
-        "string" => values("<string>", "");
-        "bytes" => values("<byte-vector>", "make(<byte-vector>, size: 0)");
-        otherwise =>
-          // TODO: message-typed, map-typed, enum-typed fields
-          values("<object>", "#f");
-      end select;
-  if (syntax = "proto2")
-    // TODO: for now there is no way to detect whether a bool field is set.
-    values(iff(proto-type = "bool",
-               "<boolean>",
-               iff(type-name = "<object>",
-                   type-name,
-                   sformat("false-or(%s)", type-name))),
-           "#f")
+  let label = field-descriptor-proto-label(field);
+  let camel-type = field-descriptor-proto-type-name(field);
+  debug("=> dylan-slot-type(%=, %=, %=, file, %=)",
+        syntax, label, camel-type, descriptor-proto-name(message));
+  if (label = $field-descriptor-proto-label-label-repeated)
+    values("false-or(<stretchy-vector>)", "#f")
   else
-    values(type-name, default)
+    let (type-name, default)
+      = select (camel-type by \=)
+          "double" => values("<double-float>", "0.0d0");
+          "float"  => values("<single-float>", "0.0");
+          "int32"  => values("<int32>", "0");
+          "int64"  => values("<int64>", "0");
+          "uint32" => values("<uint32>", "0");
+          "uint64" => values("<uint64>", "0");
+          "sint32" => values("<sint32>", "0");
+          "sint64" => values("<sint64>", "0");
+          "fixed32" => values("<fixed32>", "0");
+          "fixed64" => values("<fixed64>", "0");
+          "sfixed32" => values("<sfixed32>", "0");
+          "sfixed64" => values("<sfixed64>", "0");
+          "bool" => values("<boolean>", "#f");
+          "string" => values("<string>", "");
+          "bytes" => values("<byte-vector>", "make(<byte-vector>, size: 0)");
+          otherwise =>
+            let descriptor = name-lookup(camel-type, file, message);
+            values(full-dylan-class-name(descriptor),
+                   "#f");
+        end select;
+    if (syntax = "proto2")
+      // TODO: for now there is no way to detect whether a bool field is set.
+      values(iff(camel-type = "bool",
+                 "<boolean>",
+                 iff(type-name = "<object>",
+                     type-name,
+                     sformat("false-or(%s)", type-name))),
+             "#f")
+    else
+      values(type-name, default)
+    end
   end
+end function;
+
+// Determine the Dylan name of the descriptor by following its path to the
+// root. I
+define function full-dylan-class-name
+    (descriptor :: <protocol-buffer-object>) => (name :: <string>)
+  iterate loop (desc = descriptor, names = #())
+    debug("full-dylan-class-name: desc: %=, names: %=", desc, names);
+    if (desc)
+      loop(desc.descriptor-parent,
+           pair(desc.descriptor-name, names))
+    else
+      let name = join(names, "-", key: dylan-name);
+      select (descriptor by instance?)
+        <descriptor-proto>,
+        <enum-descriptor-proto> =>
+          concat("<", name, ">");
+        otherwise =>
+          name;
+      end
+    end
+  end
+end function;
+
+// Given the (possibly qualified) name of a message or enum, find its Dylan
+// name by traversing the AST based on the components of its name to verify
+// that it refers to a valid object. A leading dot (.Foo.Bar.baz) is fully
+// qualified and the search starts with `file`. Otherwise the search is
+// relative and starts with `message` (where the reference occured). Return the
+// Dylan class name. If not found, signal an error.
+define function name-lookup
+    (camel-type :: <string>, file :: <file-descriptor-proto>,
+     message :: <descriptor-proto>)
+ => (descriptor :: <protocol-buffer-object>)
+  let absolute? = camel-type[0] == '.';
+  let names = split(camel-type, '.', start: iff(absolute?, 1, 0));
+  iterate loop (i = 0, descriptor = iff(absolute?, file, message))
+    debug("name-lookup: loop(%d, %s)", i, descriptor);
+    if (i >= names.size)
+      descriptor
+    else
+      let name = names[i];
+      // Look for name in descriptor's messages...
+      let messages
+        = iff(descriptor == file,
+              descriptor.file-descriptor-proto-message-type,
+              descriptor.descriptor-proto-nested-type);
+      let pos = messages & position(messages, name,
+                                    test: method (name, msg)
+                                            debug("name: %=, msg: %=", name, msg);
+                                            descriptor-proto-name(msg) = name
+                                          end);
+      let message = pos & messages[pos];
+      if (message)
+        loop(i + 1, message)
+      else
+        // Current name component doesn't match a nested message at this depth
+        // so check for a matching enum.
+        let enums = iff(descriptor == file,
+                        descriptor.file-descriptor-proto-enum-type,
+                        descriptor.descriptor-proto-enum-type);
+        let pos = enums & position(enums, name,
+                                   test: method (name, enum)
+                                           debug("name: %=, msg: %=", name, enum);
+                                           enum-descriptor-proto-name(enum) = name
+                                         end);
+        let enum = pos & enums[pos];
+        if (~enum)
+          pb-error("invalid name %=: object not found", camel-type);
+        elseif (i < names.size - 1)
+          pb-error("invalid name %=: \"%s%s\" names an enum, which is a leaf node",
+                   camel-type,
+                   iff(absolute?, ".", ""),
+                   join(copy-sequence(names, end: i), "."));
+        else
+          enum
+        end
+      end
+    end if
+  end iterate
 end function;
 
 // Convert `camel` from CamelCase to kebob-case.

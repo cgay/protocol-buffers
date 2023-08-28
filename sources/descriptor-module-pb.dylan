@@ -4,6 +4,9 @@ Module: dylan-user
 
 define module google-protobuf
   use common-dylan;
+  use format;                   // added by hand
+  use print;                    // added by hand
+  use streams;                  // added by hand
   use protocol-buffers;
 
   export

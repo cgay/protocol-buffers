@@ -6,6 +6,17 @@ Guide to the generated Dylan code and how it maps from the :file:`.proto` file
 Interface Definition Language (IDL).
 
 
+Notes to be Integrated into Main Docs
+=====================================
+
+**TODO TODO TODO**
+
+* It is possible for the name of a protobuf field and nested message or enum
+  type to differ only by case. Since Dylan is not case sensitive this could
+  cause a conflict. This isn't a problem, however, due to the generated message
+  and enum types using Dylan's ``<class>`` naming convention.
+
+
 Naming
 ======
 
