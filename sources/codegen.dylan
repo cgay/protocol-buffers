@@ -139,20 +139,20 @@ define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
   code(gen, "\n");
 end method;
 
-define method emit (gen :: <generator>, enum-value :: <enum-value-descriptor-proto>,
-                    #key parent :: <string>)
+define method emit
+    (gen :: <generator>, enum-value :: <enum-value-descriptor-proto>,
+     #key parent :: <string>)
   debug("emit(<generator>, <enum-value-descriptor-proto>, parent: %=) %=", parent, enum-value.enum-value-descriptor-proto-name);
   let camel-name = enum-value-descriptor-proto-name(enum-value);
   let constant-name = concat("$", dylan-name(camel-name, parent: parent));
-  let value-type-name = "<object>"; // TODO
   let value = enum-value-descriptor-proto-number(enum-value);
   export(gen, constant-name);
-  code(gen, """define constant %s :: %s
+  code(gen, """define constant %s :: <%s>
   = make(<%s>,
          name: %=,
          value: %d);
 """,
-       constant-name, value-type-name, parent, camel-name, value);
+       constant-name, parent, parent, camel-name, value);
 end method;
 
 define method emit (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
