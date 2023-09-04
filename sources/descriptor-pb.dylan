@@ -1,7 +1,7 @@
 Module: google-protobuf
 
 define class <file-descriptor-set> (<protocol-buffer-message>)
-  slot file-descriptor-set-file :: <object>,
+  slot file-descriptor-set-file :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: file:;
 end class <file-descriptor-set>;
@@ -13,31 +13,31 @@ define class <file-descriptor-proto> (<protocol-buffer-message>)
   slot file-descriptor-proto-package :: false-or(<string>),
     init-value: #f,
     init-keyword: package:;
-  slot file-descriptor-proto-dependency :: false-or(<string>),
+  slot file-descriptor-proto-dependency :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: dependency:;
-  slot file-descriptor-proto-public-dependency :: false-or(<int32>),
+  slot file-descriptor-proto-public-dependency :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: public-dependency:;
-  slot file-descriptor-proto-weak-dependency :: false-or(<int32>),
+  slot file-descriptor-proto-weak-dependency :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: weak-dependency:;
-  slot file-descriptor-proto-message-type :: <object>,
+  slot file-descriptor-proto-message-type :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: message-type:;
-  slot file-descriptor-proto-enum-type :: <object>,
+  slot file-descriptor-proto-enum-type :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: enum-type:;
-  slot file-descriptor-proto-service :: <object>,
+  slot file-descriptor-proto-service :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: service:;
-  slot file-descriptor-proto-extension :: <object>,
+  slot file-descriptor-proto-extension :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: extension:;
-  slot file-descriptor-proto-options :: <object>,
+  slot file-descriptor-proto-options :: false-or(<file-options>),
     init-value: #f,
     init-keyword: options:;
-  slot file-descriptor-proto-source-code-info :: <object>,
+  slot file-descriptor-proto-source-code-info :: false-or(<source-code-info>),
     init-value: #f,
     init-keyword: source-code-info:;
   slot file-descriptor-proto-syntax :: false-or(<string>),
@@ -52,31 +52,31 @@ define class <descriptor-proto> (<protocol-buffer-message>)
   slot descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot descriptor-proto-field :: <object>,
+  slot descriptor-proto-field :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: field:;
-  slot descriptor-proto-extension :: <object>,
+  slot descriptor-proto-extension :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: extension:;
-  slot descriptor-proto-nested-type :: <object>,
+  slot descriptor-proto-nested-type :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: nested-type:;
-  slot descriptor-proto-enum-type :: <object>,
+  slot descriptor-proto-enum-type :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: enum-type:;
-  slot descriptor-proto-extension-range :: <object>,
+  slot descriptor-proto-extension-range :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: extension-range:;
-  slot descriptor-proto-oneof-decl :: <object>,
+  slot descriptor-proto-oneof-decl :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: oneof-decl:;
-  slot descriptor-proto-options :: <object>,
+  slot descriptor-proto-options :: false-or(<message-options>),
     init-value: #f,
     init-keyword: options:;
-  slot descriptor-proto-reserved-range :: <object>,
+  slot descriptor-proto-reserved-range :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: reserved-range:;
-  slot descriptor-proto-reserved-name :: false-or(<string>),
+  slot descriptor-proto-reserved-name :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: reserved-name:;
 end class <descriptor-proto>;
@@ -88,7 +88,7 @@ define class <descriptor-proto-extension-range> (<protocol-buffer-message>)
   slot descriptor-proto-extension-range-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;
-  slot descriptor-proto-extension-range-options :: <object>,
+  slot descriptor-proto-extension-range-options :: false-or(<extension-range-options>),
     init-value: #f,
     init-keyword: options:;
 end class <descriptor-proto-extension-range>;
@@ -103,7 +103,7 @@ define class <descriptor-proto-reserved-range> (<protocol-buffer-message>)
 end class <descriptor-proto-reserved-range>;
 
 define class <extension-range-options> (<protocol-buffer-message>)
-  slot extension-range-options-uninterpreted-option :: <object>,
+  slot extension-range-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <extension-range-options>;
@@ -115,10 +115,10 @@ define class <field-descriptor-proto> (<protocol-buffer-message>)
   slot field-descriptor-proto-number :: false-or(<int32>),
     init-value: #f,
     init-keyword: number:;
-  slot field-descriptor-proto-label :: <object>,
+  slot field-descriptor-proto-label :: false-or(<field-descriptor-proto-label>),
     init-value: #f,
     init-keyword: label:;
-  slot field-descriptor-proto-type :: <object>,
+  slot field-descriptor-proto-type :: false-or(<field-descriptor-proto-type>),
     init-value: #f,
     init-keyword: type:;
   slot field-descriptor-proto-type-name :: false-or(<string>),
@@ -136,7 +136,7 @@ define class <field-descriptor-proto> (<protocol-buffer-message>)
   slot field-descriptor-proto-json-name :: false-or(<string>),
     init-value: #f,
     init-keyword: json-name:;
-  slot field-descriptor-proto-options :: <object>,
+  slot field-descriptor-proto-options :: false-or(<field-options>),
     init-value: #f,
     init-keyword: options:;
   slot field-descriptor-proto-proto3-optional :: <boolean>,
@@ -146,90 +146,90 @@ end class <field-descriptor-proto>;
 
 define class <field-descriptor-proto-type> (<protocol-buffer-enum>) end;
 
-define constant $field-descriptor-proto-type-type-double :: <object>
+define constant $field-descriptor-proto-type-type-double :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_DOUBLE",
          value: 1);
-define constant $field-descriptor-proto-type-type-float :: <object>
+define constant $field-descriptor-proto-type-type-float :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_FLOAT",
          value: 2);
-define constant $field-descriptor-proto-type-type-int64 :: <object>
+define constant $field-descriptor-proto-type-type-int64 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_INT64",
          value: 3);
-define constant $field-descriptor-proto-type-type-uint64 :: <object>
+define constant $field-descriptor-proto-type-type-uint64 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_UINT64",
          value: 4);
-define constant $field-descriptor-proto-type-type-int32 :: <object>
+define constant $field-descriptor-proto-type-type-int32 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_INT32",
          value: 5);
-define constant $field-descriptor-proto-type-type-fixed64 :: <object>
+define constant $field-descriptor-proto-type-type-fixed64 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_FIXED64",
          value: 6);
-define constant $field-descriptor-proto-type-type-fixed32 :: <object>
+define constant $field-descriptor-proto-type-type-fixed32 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_FIXED32",
          value: 7);
-define constant $field-descriptor-proto-type-type-bool :: <object>
+define constant $field-descriptor-proto-type-type-bool :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_BOOL",
          value: 8);
-define constant $field-descriptor-proto-type-type-string :: <object>
+define constant $field-descriptor-proto-type-type-string :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_STRING",
          value: 9);
-define constant $field-descriptor-proto-type-type-group :: <object>
+define constant $field-descriptor-proto-type-type-group :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_GROUP",
          value: 10);
-define constant $field-descriptor-proto-type-type-message :: <object>
+define constant $field-descriptor-proto-type-type-message :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_MESSAGE",
          value: 11);
-define constant $field-descriptor-proto-type-type-bytes :: <object>
+define constant $field-descriptor-proto-type-type-bytes :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_BYTES",
          value: 12);
-define constant $field-descriptor-proto-type-type-uint32 :: <object>
+define constant $field-descriptor-proto-type-type-uint32 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_UINT32",
          value: 13);
-define constant $field-descriptor-proto-type-type-enum :: <object>
+define constant $field-descriptor-proto-type-type-enum :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_ENUM",
          value: 14);
-define constant $field-descriptor-proto-type-type-sfixed32 :: <object>
+define constant $field-descriptor-proto-type-type-sfixed32 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_SFIXED32",
          value: 15);
-define constant $field-descriptor-proto-type-type-sfixed64 :: <object>
+define constant $field-descriptor-proto-type-type-sfixed64 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_SFIXED64",
          value: 16);
-define constant $field-descriptor-proto-type-type-sint32 :: <object>
+define constant $field-descriptor-proto-type-type-sint32 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_SINT32",
          value: 17);
-define constant $field-descriptor-proto-type-type-sint64 :: <object>
+define constant $field-descriptor-proto-type-type-sint64 :: <field-descriptor-proto-type>
   = make(<field-descriptor-proto-type>,
          name: "TYPE_SINT64",
          value: 18);
 
 define class <field-descriptor-proto-label> (<protocol-buffer-enum>) end;
 
-define constant $field-descriptor-proto-label-label-optional :: <object>
+define constant $field-descriptor-proto-label-label-optional :: <field-descriptor-proto-label>
   = make(<field-descriptor-proto-label>,
          name: "LABEL_OPTIONAL",
          value: 1);
-define constant $field-descriptor-proto-label-label-required :: <object>
+define constant $field-descriptor-proto-label-label-required :: <field-descriptor-proto-label>
   = make(<field-descriptor-proto-label>,
          name: "LABEL_REQUIRED",
          value: 2);
-define constant $field-descriptor-proto-label-label-repeated :: <object>
+define constant $field-descriptor-proto-label-label-repeated :: <field-descriptor-proto-label>
   = make(<field-descriptor-proto-label>,
          name: "LABEL_REPEATED",
          value: 3);
@@ -238,7 +238,7 @@ define class <oneof-descriptor-proto> (<protocol-buffer-message>)
   slot oneof-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot oneof-descriptor-proto-options :: <object>,
+  slot oneof-descriptor-proto-options :: false-or(<oneof-options>),
     init-value: #f,
     init-keyword: options:;
 end class <oneof-descriptor-proto>;
@@ -247,16 +247,16 @@ define class <enum-descriptor-proto> (<protocol-buffer-message>)
   slot enum-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot enum-descriptor-proto-value :: <object>,
+  slot enum-descriptor-proto-value :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: value:;
-  slot enum-descriptor-proto-options :: <object>,
+  slot enum-descriptor-proto-options :: false-or(<enum-options>),
     init-value: #f,
     init-keyword: options:;
-  slot enum-descriptor-proto-reserved-range :: <object>,
+  slot enum-descriptor-proto-reserved-range :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: reserved-range:;
-  slot enum-descriptor-proto-reserved-name :: false-or(<string>),
+  slot enum-descriptor-proto-reserved-name :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: reserved-name:;
 end class <enum-descriptor-proto>;
@@ -277,7 +277,7 @@ define class <enum-value-descriptor-proto> (<protocol-buffer-message>)
   slot enum-value-descriptor-proto-number :: false-or(<int32>),
     init-value: #f,
     init-keyword: number:;
-  slot enum-value-descriptor-proto-options :: <object>,
+  slot enum-value-descriptor-proto-options :: false-or(<enum-value-options>),
     init-value: #f,
     init-keyword: options:;
 end class <enum-value-descriptor-proto>;
@@ -286,10 +286,10 @@ define class <service-descriptor-proto> (<protocol-buffer-message>)
   slot service-descriptor-proto-name :: false-or(<string>),
     init-value: #f,
     init-keyword: name:;
-  slot service-descriptor-proto-method :: <object>,
+  slot service-descriptor-proto-method :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: method:;
-  slot service-descriptor-proto-options :: <object>,
+  slot service-descriptor-proto-options :: false-or(<service-options>),
     init-value: #f,
     init-keyword: options:;
 end class <service-descriptor-proto>;
@@ -304,7 +304,7 @@ define class <method-descriptor-proto> (<protocol-buffer-message>)
   slot method-descriptor-proto-output-type :: false-or(<string>),
     init-value: #f,
     init-keyword: output-type:;
-  slot method-descriptor-proto-options :: <object>,
+  slot method-descriptor-proto-options :: false-or(<method-options>),
     init-value: #f,
     init-keyword: options:;
   slot method-descriptor-proto-client-streaming :: <boolean>,
@@ -331,7 +331,7 @@ define class <file-options> (<protocol-buffer-message>)
   slot file-options-java-string-check-utf8 :: <boolean>,
     init-value: #f,
     init-keyword: java-string-check-utf8:;
-  slot file-options-optimize-for :: <object>,
+  slot file-options-optimize-for :: false-or(<file-options-optimize-mode>),
     init-value: #f,
     init-keyword: optimize-for:;
   slot file-options-go-package :: false-or(<string>),
@@ -376,22 +376,22 @@ define class <file-options> (<protocol-buffer-message>)
   slot file-options-ruby-package :: false-or(<string>),
     init-value: #f,
     init-keyword: ruby-package:;
-  slot file-options-uninterpreted-option :: <object>,
+  slot file-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <file-options>;
 
 define class <file-options-optimize-mode> (<protocol-buffer-enum>) end;
 
-define constant $file-options-optimize-mode-speed :: <object>
+define constant $file-options-optimize-mode-speed :: <file-options-optimize-mode>
   = make(<file-options-optimize-mode>,
          name: "SPEED",
          value: 1);
-define constant $file-options-optimize-mode-code-size :: <object>
+define constant $file-options-optimize-mode-code-size :: <file-options-optimize-mode>
   = make(<file-options-optimize-mode>,
          name: "CODE_SIZE",
          value: 2);
-define constant $file-options-optimize-mode-lite-runtime :: <object>
+define constant $file-options-optimize-mode-lite-runtime :: <file-options-optimize-mode>
   = make(<file-options-optimize-mode>,
          name: "LITE_RUNTIME",
          value: 3);
@@ -409,19 +409,19 @@ define class <message-options> (<protocol-buffer-message>)
   slot message-options-map-entry :: <boolean>,
     init-value: #f,
     init-keyword: map-entry:;
-  slot message-options-uninterpreted-option :: <object>,
+  slot message-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <message-options>;
 
 define class <field-options> (<protocol-buffer-message>)
-  slot field-options-ctype :: <object>,
+  slot field-options-ctype :: false-or(<field-options-ctype>),
     init-value: #f,
     init-keyword: ctype:;
   slot field-options-packed :: <boolean>,
     init-value: #f,
     init-keyword: packed:;
-  slot field-options-jstype :: <object>,
+  slot field-options-jstype :: false-or(<field-options-js-type>),
     init-value: #f,
     init-keyword: jstype:;
   slot field-options-lazy :: <boolean>,
@@ -436,43 +436,43 @@ define class <field-options> (<protocol-buffer-message>)
   slot field-options-weak :: <boolean>,
     init-value: #f,
     init-keyword: weak:;
-  slot field-options-uninterpreted-option :: <object>,
+  slot field-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <field-options>;
 
 define class <field-options-ctype> (<protocol-buffer-enum>) end;
 
-define constant $field-options-ctype-string :: <object>
+define constant $field-options-ctype-string :: <field-options-ctype>
   = make(<field-options-ctype>,
          name: "STRING",
          value: 0);
-define constant $field-options-ctype-cord :: <object>
+define constant $field-options-ctype-cord :: <field-options-ctype>
   = make(<field-options-ctype>,
          name: "CORD",
          value: 1);
-define constant $field-options-ctype-string-piece :: <object>
+define constant $field-options-ctype-string-piece :: <field-options-ctype>
   = make(<field-options-ctype>,
          name: "STRING_PIECE",
          value: 2);
 
 define class <field-options-js-type> (<protocol-buffer-enum>) end;
 
-define constant $field-options-js-type-js-normal :: <object>
+define constant $field-options-js-type-js-normal :: <field-options-js-type>
   = make(<field-options-js-type>,
          name: "JS_NORMAL",
          value: 0);
-define constant $field-options-js-type-js-string :: <object>
+define constant $field-options-js-type-js-string :: <field-options-js-type>
   = make(<field-options-js-type>,
          name: "JS_STRING",
          value: 1);
-define constant $field-options-js-type-js-number :: <object>
+define constant $field-options-js-type-js-number :: <field-options-js-type>
   = make(<field-options-js-type>,
          name: "JS_NUMBER",
          value: 2);
 
 define class <oneof-options> (<protocol-buffer-message>)
-  slot oneof-options-uninterpreted-option :: <object>,
+  slot oneof-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <oneof-options>;
@@ -484,7 +484,7 @@ define class <enum-options> (<protocol-buffer-message>)
   slot enum-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot enum-options-uninterpreted-option :: <object>,
+  slot enum-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <enum-options>;
@@ -493,7 +493,7 @@ define class <enum-value-options> (<protocol-buffer-message>)
   slot enum-value-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot enum-value-options-uninterpreted-option :: <object>,
+  slot enum-value-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <enum-value-options>;
@@ -502,7 +502,7 @@ define class <service-options> (<protocol-buffer-message>)
   slot service-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot service-options-uninterpreted-option :: <object>,
+  slot service-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <service-options>;
@@ -511,31 +511,31 @@ define class <method-options> (<protocol-buffer-message>)
   slot method-options-deprecated :: <boolean>,
     init-value: #f,
     init-keyword: deprecated:;
-  slot method-options-idempotency-level :: <object>,
+  slot method-options-idempotency-level :: false-or(<method-options-idempotency-level>),
     init-value: #f,
     init-keyword: idempotency-level:;
-  slot method-options-uninterpreted-option :: <object>,
+  slot method-options-uninterpreted-option :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: uninterpreted-option:;
 end class <method-options>;
 
 define class <method-options-idempotency-level> (<protocol-buffer-enum>) end;
 
-define constant $method-options-idempotency-level-idempotency-unknown :: <object>
+define constant $method-options-idempotency-level-idempotency-unknown :: <method-options-idempotency-level>
   = make(<method-options-idempotency-level>,
          name: "IDEMPOTENCY_UNKNOWN",
          value: 0);
-define constant $method-options-idempotency-level-no-side-effects :: <object>
+define constant $method-options-idempotency-level-no-side-effects :: <method-options-idempotency-level>
   = make(<method-options-idempotency-level>,
          name: "NO_SIDE_EFFECTS",
          value: 1);
-define constant $method-options-idempotency-level-idempotent :: <object>
+define constant $method-options-idempotency-level-idempotent :: <method-options-idempotency-level>
   = make(<method-options-idempotency-level>,
          name: "IDEMPOTENT",
          value: 2);
 
 define class <uninterpreted-option> (<protocol-buffer-message>)
-  slot uninterpreted-option-name :: <object>,
+  slot uninterpreted-option-name :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: name:;
   slot uninterpreted-option-identifier-value :: false-or(<string>),
@@ -568,16 +568,16 @@ define class <uninterpreted-option-name-part> (<protocol-buffer-message>)
 end class <uninterpreted-option-name-part>;
 
 define class <source-code-info> (<protocol-buffer-message>)
-  slot source-code-info-location :: <object>,
+  slot source-code-info-location :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: location:;
 end class <source-code-info>;
 
 define class <source-code-info-location> (<protocol-buffer-message>)
-  slot source-code-info-location-path :: false-or(<int32>),
+  slot source-code-info-location-path :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: path:;
-  slot source-code-info-location-span :: false-or(<int32>),
+  slot source-code-info-location-span :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: span:;
   slot source-code-info-location-leading-comments :: false-or(<string>),
@@ -586,19 +586,19 @@ define class <source-code-info-location> (<protocol-buffer-message>)
   slot source-code-info-location-trailing-comments :: false-or(<string>),
     init-value: #f,
     init-keyword: trailing-comments:;
-  slot source-code-info-location-leading-detached-comments :: false-or(<string>),
+  slot source-code-info-location-leading-detached-comments :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: leading-detached-comments:;
 end class <source-code-info-location>;
 
 define class <generated-code-info> (<protocol-buffer-message>)
-  slot generated-code-info-annotation :: <object>,
+  slot generated-code-info-annotation :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: annotation:;
 end class <generated-code-info>;
 
 define class <generated-code-info-annotation> (<protocol-buffer-message>)
-  slot generated-code-info-annotation-path :: false-or(<int32>),
+  slot generated-code-info-annotation-path :: false-or(<stretchy-vector>),
     init-value: #f,
     init-keyword: path:;
   slot generated-code-info-annotation-source-file :: false-or(<string>),
@@ -610,22 +610,22 @@ define class <generated-code-info-annotation> (<protocol-buffer-message>)
   slot generated-code-info-annotation-end :: false-or(<int32>),
     init-value: #f,
     init-keyword: end:;
-  slot generated-code-info-annotation-semantic :: <object>,
+  slot generated-code-info-annotation-semantic :: false-or(<generated-code-info-annotation-semantic>),
     init-value: #f,
     init-keyword: semantic:;
 end class <generated-code-info-annotation>;
 
 define class <generated-code-info-annotation-semantic> (<protocol-buffer-enum>) end;
 
-define constant $generated-code-info-annotation-semantic-none :: <object>
+define constant $generated-code-info-annotation-semantic-none :: <generated-code-info-annotation-semantic>
   = make(<generated-code-info-annotation-semantic>,
          name: "NONE",
          value: 0);
-define constant $generated-code-info-annotation-semantic-set :: <object>
+define constant $generated-code-info-annotation-semantic-set :: <generated-code-info-annotation-semantic>
   = make(<generated-code-info-annotation-semantic>,
          name: "SET",
          value: 1);
-define constant $generated-code-info-annotation-semantic-alias :: <object>
+define constant $generated-code-info-annotation-semantic-alias :: <generated-code-info-annotation-semantic>
   = make(<generated-code-info-annotation-semantic>,
          name: "ALIAS",
          value: 2);

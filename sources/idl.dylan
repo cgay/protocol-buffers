@@ -740,7 +740,7 @@ define function parse-enum
   let name-path = pair(name, parent-names);
   expect-token(parser, "{");
   let fields  = make(<stretchy-vector>);
-  let options = make(<stretchy-vector>);
+  let options = make(<enum-options>);
   block (done)
     while (#t)
       let token = parser.next-token;
@@ -773,7 +773,8 @@ define function parse-enum
 end function;
 
 define function parse-enum-field
-    (parser :: <parser>, name :: <token>) => (field :: <enum-value-descriptor-proto>)
+    (parser :: <parser>, name :: <token>)
+ => (field :: <enum-value-descriptor-proto>)
   if (~instance?(name, <identifier-token>))
     parse-error("unexpected token type %s", sformat("%=", name));
   end;
