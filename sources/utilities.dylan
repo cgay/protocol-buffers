@@ -9,7 +9,7 @@ Module: protocol-buffers-impl
 define class <protocol-buffer-error> (<format-string-condition>, <error>) end;
 
 define function pb-error
-    (format-string :: <string>, #rest format-args) => ()
+    (format-string :: <string>, #rest format-args)
   error(make(<protocol-buffer-error>,
              format-string: format-string,
              format-arguments: format-args));
