@@ -6,6 +6,8 @@ Synopsis: Generate Dylan code from a protobuf IDL parse tree
 //
 // * output the proto IDL name at the beginning and end of the Dylan code for it.
 // * output the proto IDL comments in the appropriate place.
+// * The package decl may appear anywhere in the file except before the syntax
+//   decl. Test that this works.
 
 // Callers should normally supply two different file streams.
 define class <generator> (<object>)
@@ -131,7 +133,7 @@ define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
   // enum-value and enum-value-name on the value constants, and they're
   // inherited from the superclass.
   code(gen, "define class %s (<protocol-buffer-enum>) end;\n\n", class-name);
-  for (enum-value in enum-descriptor-proto-value(enum))
+  for (enum-value in enum-descriptor-proto-value(enum) | #[])
     emit(gen, enum-value, parent: full-name)
   end;
   code(gen, "\n");
@@ -201,12 +203,21 @@ end module %s;
 """;
 
 define function dylan-module-name
-    (gen :: <generator>, file :: <file-descriptor-proto>) => (name :: <string>)
+    (gen :: <generator>, file :: <file-descriptor-proto>)
+ => (name :: <string>)
   gen.module-name
-    | map(method (ch)
-            iff((ch == '.' | ch == '_'), '-', ch)
-          end,
-          file-descriptor-proto-package(file))
+    | begin
+        let package = file-descriptor-proto-package(file);
+        if (package)
+          map(method (ch)
+                iff((ch == '.' | ch == '_'), '-', ch)
+              end,
+              package)
+        else
+          locator-base(as(<file-locator>,
+                          file-descriptor-proto-name(file)))
+        end
+      end;
 end function;
 
 // `parent` should already have been run through camel-to-kebob.

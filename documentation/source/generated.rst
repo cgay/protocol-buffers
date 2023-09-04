@@ -28,8 +28,9 @@ rules:
 * Message and enum names are surrounded by angle brackets. ``message Foo``
   becomes ``class <foo>``. Nested ``message Bar`` becomes ``<foo-bar>``.
 * In package names, dot and underscore are converted to hyphen to make the
-  Dylan module name, unless overridden by an option.
-
+  Dylan module name, unless overridden by an option. If no package name is
+  provided in the .proto file, the Dylan module name is the same as the file
+  name, without the ``.proto`` extension.
 
 Usage
 =====
