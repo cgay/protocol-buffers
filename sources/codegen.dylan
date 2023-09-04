@@ -309,55 +309,59 @@ end function;
 // name by traversing the AST based on the components of its name to verify
 // that it refers to a valid object. A leading dot (.Foo.Bar.baz) is fully
 // qualified and the search starts with `file`. Otherwise the search is
-// relative and starts with `message` (where the reference occured). Return the
-// Dylan class name. If not found, signal an error.
+// relative and starts with `message` (where the reference occured) but also
+// with fall-back to `file`. Return the Dylan class name. If not found, signal
+// an error.
 define function name-lookup
     (camel-type :: <string>, file :: <file-descriptor-proto>,
      message :: <descriptor-proto>)
  => (descriptor :: <protocol-buffer-object>)
   let absolute? = camel-type[0] == '.';
   let names = split(camel-type, '.', start: iff(absolute?, 1, 0));
-  iterate loop (i = 0, descriptor = iff(absolute?, file, message))
-    debug("name-lookup: loop(%d, %s)", i, descriptor);
+  if (absolute?)
+    lookup(camel-type, names, file)
+  else
+    lookup(camel-type, names, message)
+      | lookup(camel-type, names, file)
+  end
+  | pb-error("invalid name %=: object not found", camel-type)
+end function;
+
+define function lookup
+    (orig :: <string>, names :: <seq>, root :: <protocol-buffer-object>)
+ => (descriptor :: false-or(<protocol-buffer-object>))
+  iterate loop (i = 0, descriptor = root)
+    debug("lookup: loop(%d, %s)", i, descriptor);
     if (i >= names.size)
       descriptor
     else
       let name = names[i];
       // Look for name in descriptor's messages...
-      let messages
-        = iff(descriptor == file,
-              descriptor.file-descriptor-proto-message-type,
-              descriptor.descriptor-proto-nested-type);
-      let pos = messages & position(messages, name,
-                                    test: method (name, msg)
-                                            debug("name: %=, msg: %=", name, msg);
-                                            descriptor-proto-name(msg) = name
-                                          end);
+      let messages = iff(instance?(descriptor, <file-descriptor-proto>),
+                         descriptor.file-descriptor-proto-message-type,
+                         descriptor.descriptor-proto-nested-type);
+      let pos
+        = messages & position(messages, name,
+                              test: method (name, msg)
+                                      debug("name: %=, msg: %=", name, msg);
+                                      descriptor-proto-name(msg) = name
+                                    end);
       let message = pos & messages[pos];
       if (message)
         loop(i + 1, message)
       else
         // Current name component doesn't match a nested message at this depth
         // so check for a matching enum.
-        let enums = iff(descriptor == file,
+        let enums = iff(instance?(descriptor, <file-descriptor-proto>),
                         descriptor.file-descriptor-proto-enum-type,
                         descriptor.descriptor-proto-enum-type);
-        let pos = enums & position(enums, name,
-                                   test: method (name, enum)
-                                           debug("name: %=, msg: %=", name, enum);
-                                           enum-descriptor-proto-name(enum) = name
-                                         end);
-        let enum = pos & enums[pos];
-        if (~enum)
-          pb-error("invalid name %=: object not found", camel-type);
-        elseif (i < names.size - 1)
-          pb-error("invalid name %=: \"%s%s\" names an enum, which is a leaf node",
-                   camel-type,
-                   iff(absolute?, ".", ""),
-                   join(copy-sequence(names, end: i), "."));
-        else
-          enum
-        end
+        let pos
+          = enums & position(enums, name,
+                             test: method (name, enum)
+                                     debug("name: %=, msg: %=", name, enum);
+                                     enum-descriptor-proto-name(enum) = name
+                                   end);
+        pos & enums[pos]
       end
     end if
   end iterate
