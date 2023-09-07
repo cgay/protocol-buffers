@@ -629,3 +629,4 @@ define constant $generated-code-info-annotation-semantic-alias :: <generated-cod
   = make(<generated-code-info-annotation-semantic>,
          name: "ALIAS",
          value: 2);
+
