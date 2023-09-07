@@ -1,5 +1,6 @@
 Module: protocol-buffers-impl
-Synopsis: Generate Dylan code from a protobuf IDL parse tree
+Synopsis: Invoke the parser on a set of files and then
+          Generate Dylan code from the parse tree.
 
 
 // TODO:
@@ -9,29 +10,69 @@ Synopsis: Generate Dylan code from a protobuf IDL parse tree
 // * The package decl may appear anywhere in the file except before the syntax
 //   decl. Test that this works.
 
+// I kind of prefer ".pb.dylan", for unexplainable aesthetic reasons, but
+// https://github.com/dylan-lang/opendylan/issues/1529 needs fixing first.
+define constant $generated-file-suffix :: <string> = "-pb.dylan";
+define constant $generated-module-suffix :: <string> = "-module-pb.dylan";
+
+
 // Callers should normally supply two different file streams.
 define class <generator> (<object>)
-  constant slot module-stream :: <stream> = *standard-output*,
-    init-keyword: module-stream:;
-  constant slot code-stream :: <stream> = *standard-output*,
-    init-keyword: code-stream:;
-  constant slot exported-names :: <stretchy-vector> = make(<stretchy-vector>);
+  constant slot generator-input-files :: <seq>,
+    required-init-keyword: input-files:;
+  constant slot generator-output-directory :: <directory-locator>,
+    required-init-keyword: output-directory:;
 
   // If `library-name` is provided, then also output a library
   // definition. The library is optional so that Dylan protobuf code can be
   // compiled directly into another library.
-  constant slot library-name :: false-or(<string>) = #f,
+  constant slot generator-library-name :: false-or(<string>) = #f,
     init-keyword: library-name:;
-  constant slot module-name :: false-or(<string>) = #f,
-    init-keyword: module-name:;
-  constant slot proto-syntax :: <string>,
-    required-init-keyword: syntax:;
+
+  // Maps Dylan module names to sequences of exported names.
+  constant slot exported-names :: <string-table>
+    = make(<string-table>);
+  // Dylan module name to proto package name.
+  constant slot module-to-package = make(<string-table>);
+
+  // Keeps track of parsed files.
+  constant slot generator-file-set :: <file-descriptor-set>
+    = make(<file-descriptor-set>,
+           file: make(<stretchy-vector>));
 end class;
 
 // Exported
 define function generate-dylan-code
-    (gen :: <generator>, file :: <file-descriptor-proto>, #key)
-  emit(gen, file);
+    (gen :: <generator>, #key)
+  let file-set = gen.generator-file-set;
+  for (file in gen.generator-input-files)
+    let descriptor = parse-file(gen, file);
+    add!(file-descriptor-set-file(file-set), descriptor);
+  end;
+  emit(gen, file-set);
+  let library-name = gen.generator-library-name;
+  if (library-name)
+    let output-dir = gen.generator-output-directory;
+    let library-file = file-locator(output-dir, library-name);
+    with-open-file (stream = library-file,
+                    direction: #"output",
+                    if-exists: #"replace")
+      format(stream, $library-template, library-name, library-name);
+    end;
+  end;
+end function;
+
+define function parse-file
+    (gen :: <generator>, file :: <file-locator>)
+ => (descriptor :: <file-descriptor-proto>)
+  with-open-file (in-stream = file, direction: #"input")
+    let descriptor
+      = make(<file-descriptor-proto>, name: as(<string>, file));
+    let lexer = make(<lexer>, stream: in-stream);
+    parse-file-stream(make(<parser>, lexer: lexer),
+                      descriptor);
+    descriptor
+  end
 end function;
 
 // Emit code for an object. Each emit method should end its output with \n.
@@ -41,38 +82,84 @@ end function;
 define generic emit
     (gen :: <generator>, object :: <protocol-buffer-object>, #key, #all-keys);
 
-define function code (gen :: <generator>, format-string :: <string>, #rest args)
-  apply(format, gen.code-stream, format-string, args);
-  force-output(gen.code-stream);
+define function code
+    (gen :: <generator>, format-string :: <string>, #rest args)
+  apply(format, *code-stream*, format-string, args);
+  force-output(*code-stream*);
 end function;
 
 define function export (gen :: <generator>, name :: <string>)
-  add-new!(gen.exported-names, name, test: \=);
+  let names = element(gen.exported-names, *current-module*,
+                      default: #f);
+  if (~names)
+    names := make(<stretchy-vector>);
+    gen.exported-names[*current-module*] := names;
+  end;
+  add-new!(names, name, test: \=);
 end function;
 
 
 
 define method emit
     (gen :: <generator>, file-set :: <file-descriptor-set>, #key)
-  // TODO
-  error("file sets not yet implemented");
+  // Emitting each file writes the -pb.dylan file directly, but also stores in
+  // gen any names that should be exported. This way files that are in the same
+  // protobuf "package" can later be emitted into a single -module-pb.dylan
+  // file.
+  for (file in file-set.file-descriptor-set-file)
+    emit(gen, file)
+  end;
+  for (names keyed-by module-name in gen.exported-names)
+    emit-module-file(gen, module-name, names);
+  end;
 end method;
+
+define function emit-module-file
+    (gen :: <generator>, module-name :: <string>, names :: <seq>)
+  let output-dir = gen.generator-output-directory;
+  let module-file
+    = file-locator(output-dir, concat(module-name, $generated-module-suffix));
+  with-open-file (stream = module-file,
+                  direction: #"output",
+                  if-exists: #"replace")
+    format(stream, $module-template,
+           gen.module-to-package[module-name],
+           module-name,
+           join(map(curry(concat, "    "),
+                    names),
+                ",\n"),
+           module-name);
+  end;
+end function;
+
 
 // The current file being processed, for looking up qualified names.
 define thread variable *file-descriptor-proto* :: false-or(<file-descriptor-proto>) = #f;
+define thread variable *code-stream* :: false-or(<stream>) = #f;
+define thread variable *current-module* :: false-or(<string>) = #f;
 
 define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
   debug("emit(<generator>, <file-descriptor-proto>) %=", file.file-descriptor-proto-name);
-  dynamic-bind (*file-descriptor-proto* = file)
-    code(gen, "Module: %s\n\n", dylan-module-name(gen, file));
-    for (enum in file-descriptor-proto-enum-type(file) | #[])
-      emit(gen, enum);
-    end;
-    for (message in file-descriptor-proto-message-type(file) | #[])
-      emit(gen, message);
-    end;
-    emit-module-definition(gen, file);
-  end;
+  let output-dir = gen.generator-output-directory;
+  let absfile = as(<file-locator>, file.file-descriptor-proto-name);
+  let output-file = file-locator(output-dir,
+                                 concat(locator-base(absfile),
+                                        $generated-file-suffix));
+  with-open-file (stream = output-file,
+                  direction: #"output",
+                  if-exists: #"replace")
+    dynamic-bind (*current-module* = #f,
+                  *code-stream* = stream,
+                  *file-descriptor-proto* = file)
+      code(gen, "Module: %s\n\n", dylan-module-name(gen, file));
+      for (enum in file-descriptor-proto-enum-type(file) | #[])
+        emit(gen, enum);
+      end;
+      for (message in file-descriptor-proto-message-type(file) | #[])
+        emit(gen, message);
+      end;
+    end dynamic-bind;
+  end with-open-file;
 end method;
 
 // `parent` is provided if this is a nested message.
@@ -111,7 +198,7 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
   let getter = dylan-name(camel-name, parent: message-name);
   let (dylan-type-name :: <string>,
        default-for-type :: <string>)
-    = dylan-slot-type(proto-syntax(gen), *file-descriptor-proto*, message, field);
+    = dylan-slot-type(*file-descriptor-proto*, message, field);
   debug("<= dylan-slot-type: %=, default-for-type: %=", dylan-type-name, default-for-type);
   export(gen, getter);
   export(gen, concat(getter, "-setter"));
@@ -161,39 +248,21 @@ define method emit (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
   let name = dylan-name(oneof-descriptor-proto-name(oneof), parent: parent);
 end method;
 
-define function emit-module-definition
-    (gen :: <generator>, file :: <file-descriptor-proto>)
-  let stream = gen.module-stream;
-  format(stream, $module-header);
-  if (gen.library-name)
-    format(stream, $library-template, gen.library-name, gen.library-name);
-  end;
-  let module-name = dylan-module-name(gen, file);
-  format(stream, $module-template,
-         module-name,
-         join(map(curry(concat, "    "),
-                  gen.exported-names),
-              ",\n"),
-         module-name);
-end function;
-
-define constant $module-header
-  = """Module: dylan-user
-
-// *** This code was automatically generated by pbgen. ***
-
-""";
-
 define constant $library-template
-  = """define library %s
+  = """Module: dylan-user
+Synopsis: Library definition generated from .proto files by pbgen.
+
+define library %s
   use common-dylan;
   use protocol-buffers;
 end library %s;
-
 """;
 
 define constant $module-template
-  = """define module %s
+  = """Module: dylan-user
+Synopsis: Code generated for package %= by pbgen.
+
+define module %s
   use common-dylan;
   use protocol-buffers;
 
@@ -205,18 +274,21 @@ end module %s;
 define function dylan-module-name
     (gen :: <generator>, file :: <file-descriptor-proto>)
  => (name :: <string>)
-  gen.module-name
+  *current-module*
     | begin
         let package = file-descriptor-proto-package(file);
-        if (package)
-          map(method (ch)
-                iff((ch == '.' | ch == '_'), '-', ch)
-              end,
-              package)
-        else
-          locator-base(as(<file-locator>,
-                          file-descriptor-proto-name(file)))
-        end
+        let module-name
+          = if (package)
+              map(method (ch)
+                    iff((ch == '.' | ch == '_'), '-', ch)
+                  end,
+                  package)
+            else
+              locator-base(as(<file-locator>,
+                              file-descriptor-proto-name(file)))
+            end;
+        gen.module-to-package[module-name] := (package | module-name);
+        *current-module* := module-name;
       end;
 end function;
 
@@ -237,11 +309,12 @@ end function;
 
 // Determine the Dylan slot type and default value for a proto field.
 define function dylan-slot-type
-    (syntax :: <string>, file :: <file-descriptor-proto>, message :: <descriptor-proto>,
+    (file :: <file-descriptor-proto>, message :: <descriptor-proto>,
      field :: <field-descriptor-proto>)
  => (dylan-type :: <string>, default :: <string>)
   let label = field-descriptor-proto-label(field);
   let camel-type = field-descriptor-proto-type-name(field);
+  let syntax = file-descriptor-proto-syntax(file);
   debug("=> dylan-slot-type(%=, %=, %=, file, %=)",
         syntax, label, camel-type, descriptor-proto-name(message));
   if (label = $field-descriptor-proto-label-label-repeated)
