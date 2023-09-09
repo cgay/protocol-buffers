@@ -74,11 +74,11 @@ define module protocol-buffers-impl
     token-value,
     read-token,
 
-    // Parser
+    // Parser API
     <parser>,
     parse-file-stream,
 
-    // Code generator
+    // Code generator API
     <generator>,
     generate-dylan-code,
 
@@ -88,5 +88,6 @@ define module protocol-buffers-impl
 
     // For testing only
     dylan-name,
-    dylan-class-name;
+    dylan-class-name,
+    parse-option-name;
 end module;

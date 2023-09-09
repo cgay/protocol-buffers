@@ -147,3 +147,41 @@ define test test-read-token-numeric-literals ()
   check-equal("inf", inf+, read-value("inf"));
   check-equal("-inf", inf-, read-value("-inf"));
 end test;
+
+define test test-read-identifier ()
+  check-equal("simple identifier",
+              read-values("foo"), #("foo"));
+  check-equal("dotted identifier",
+              read-values("foo.bar"), #("foo", '.', "bar"));
+  check-equal("absolute identifier",
+              read-values(".foo.bar"), #('.', "foo", '.', "bar"));
+  check-equal("dotted identifier",
+              read-values("foo.bar"), #("foo", '.', "bar"));
+  check-equal("extensions-1",
+              read-values("(foo.bar)"), #('(', "foo", '.', "bar", ')'));
+  check-equal("extensions-2",
+              read-values("a.(foo.bar).b"),
+              #("a", '.', '(', "foo", '.', "bar", ')', '.', "b"));
+end test;
+
+define function parser-for (input :: <string>) => (p :: <parser>)
+  make(<parser>,
+       lexer: make(<lexer>,
+                   stream: make(<string-stream>,
+                                contents: input)))
+end function;
+
+define test test-parse-option-name ()
+  check-equal("simple name",
+              parse-option-name(parser-for("foo =")),
+              #("foo"));
+  check-equal("dotted name",
+              parse-option-name(parser-for("foo.bar =")),
+              #("foo", '.', "bar"));
+  check-equal("absolute name",
+              parse-option-name(parser-for(".foo.bar =")),
+              #('.', "foo", '.', "bar"));
+  check-equal("name with extension",
+              parse-option-name(parser-for(".foo.(.bar) =")),
+              #('.', "foo", '.', '(', '.', "bar", ')'));
+end test;

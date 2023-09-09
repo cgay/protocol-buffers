@@ -3,12 +3,18 @@ Synopsis: Invoke the parser on a set of files and then
           Generate Dylan code from the parse tree.
 
 
-// TODO:
+// TODO (extremely incomplete list):
 //
-// * output the proto IDL name at the beginning and end of the Dylan code for it.
-// * output the proto IDL comments in the appropriate place.
+// * Output the proto IDL name at the beginning and end of the Dylan code for it.
+//
+// * Output the proto IDL comments in the appropriate place.
+//
 // * The package decl may appear anywhere in the file except before the syntax
 //   decl. Test that this works.
+//
+// * Generate add-* functions for repeated fields. They will create the
+//   sequence if not done yet, and we can type the field as <seq> even if using
+//   <stretchy-vector> internally.
 
 // I kind of prefer ".pb.dylan", for unexplainable aesthetic reasons, but
 // https://github.com/dylan-lang/opendylan/issues/1529 needs fixing first.

@@ -186,8 +186,8 @@ define function read-token-1
       // According to the spec, identifiers must start with a letter, but
       // unit tests in Google's protobuf repo assume that leading
       // underscore is valid so....  '.' is for fully qualified identifiers.
-      if (char == '_' | char == '.' | alphabetic?(char))
-        read-qualified-identifier-or-reserved-word(lex)
+      if (char == '_' | alphabetic?(char))
+        read-identifier-or-reserved-word(lex)
       else
         lex-error(lex, "unexpected character: %c", char);
       end;
@@ -345,18 +345,16 @@ define function read-numeric-literal
   end
 end function read-numeric-literal;
 
-// "string", "_foo, "Foo", "Foo.bar", ".Foo.Bar"
-// Leading '_' is allowed due to its presence in Google's unit tests.
-define function read-qualified-identifier-or-reserved-word
+// Read a simple identifier, which may be a reserved word.  Leading '_' is
+// allowed due to its presence in Google's unit tests. Note that qualified
+// identifiers (with dots) are parsed as separate tokens.
+define function read-identifier-or-reserved-word
     (lex :: <lexer>) => (token :: <token>)
   let identifier = make(<stretchy-vector>);
-  iterate loop (ch = peek-char(lex), prev = #f)
-    if (ch & (ch == '_' | ch == '.' | alphanumeric?(ch)))
-      if (ch == '.' & prev == '.')
-        lex-error(lex, "qualified names may not contain consecutive '.' characters");
-      end;
+  iterate loop (ch = peek-char(lex))
+    if (ch & (ch == '_' | alphanumeric?(ch)))
       add!(identifier, consume-char(lex));
-      loop(peek-char(lex), ch)
+      loop(peek-char(lex))
     end;
   end;
   let text = as(<string>, identifier);
@@ -560,8 +558,10 @@ define class <parser> (<object>)
   constant slot %lexer :: <lexer>, required-init-keyword: lexer:;
 end class;
 
-define function next-token (parser :: <parser>) => (token :: false-or(<token>))
+define function next-token
+    (parser :: <parser>, #key msg) => (token :: false-or(<token>))
   read-token(parser.%lexer)
+    | (msg & parse-error(msg))
 end function;
 
 
@@ -601,42 +601,44 @@ define function discard-statement (parser :: <parser>) => (#rest tokens)
       reverse!(tokens)
     else
       loop(next-token(parser), pair(t, tokens))
-    end;
-  end;
+    end
+  end
 end function;
 
 // Fills in the slots of `file-descriptor` based on the parse, but the
 // file-descriptor-proto-name slot is the responsibility of the caller.
 define function parse-file-stream
-    (parser :: <parser>, file-descriptor :: <file-descriptor-proto>) => ()
+    (parser :: <parser>, file :: <file-descriptor-proto>) => ()
   iterate loop (token = next-token(parser))
     if (token)
       select (token.token-value)
         #"syntax" =>
           expect-token(parser, "=");
           let token = expect-token(parser, #("proto2", "proto3", "editions"));
-          file-descriptor-proto-syntax(file-descriptor)
+          file-descriptor-proto-syntax(file)
             := token.token-text;
           expect-token(parser, ";");
         #"package" =>
           let package-name = parse-qualified-identifier(parser);
-          file-descriptor-proto-package(file-descriptor)
+          file-descriptor-proto-package(file)
             := join(package-name, ".");
         #"option" =>
-          parse-file-option(parser, file-descriptor);
+          let options = file.file-descriptor-proto-options | make(<file-options>);
+          file.file-descriptor-proto-options := options;
+          parse-file-option(parser, options);
         #"message" =>
-          if (~file-descriptor-proto-message-type(file-descriptor))
-            file-descriptor-proto-message-type(file-descriptor)
+          if (~file-descriptor-proto-message-type(file))
+            file-descriptor-proto-message-type(file)
               := make(<stretchy-vector>);
           end;
-          add!(file-descriptor-proto-message-type(file-descriptor),
-               parse-message(parser, file-descriptor, #()));
+          add!(file-descriptor-proto-message-type(file),
+               parse-message(parser, file, #()));
         #"enum" =>
-          if (~file-descriptor-proto-enum-type(file-descriptor))
-            file-descriptor-proto-enum-type(file-descriptor)
+          if (~file-descriptor-proto-enum-type(file))
+            file-descriptor-proto-enum-type(file)
               := make(<stretchy-vector>);
           end;
-          add!(file-descriptor-proto-enum-type(file-descriptor),
+          add!(file-descriptor-proto-enum-type(file),
                parse-enum(parser, #()));
         otherwise =>
           // sformat is because the default handler prints error messages with
@@ -648,15 +650,50 @@ define function parse-file-stream
   end iterate;
 end function;
 
-// TODO: see if option parsers can share code.
 define function parse-file-option
-    (parser :: <parser>, file :: <file-descriptor-proto>) => ()
-  let option-name = expect-token(parser, <identifier-token>);
+    (parser :: <parser>, options :: <file-options>) => ()
+  let name :: <seq> = parse-option-name(parser);
   expect-token(parser, "=");
-  // TODO: finish option parsing. We don't care about most of the FileOptions
-  // fields (java, swift, go, etc options) but there are a few we'll need to
-  // handle, and there will probably be Dylan options at some point.
-  discard-statement(parser);
+  let value = token-value(next-token(parser, msg: "while parsing option value"));
+  expect-token(parser, ";");
+
+  // Most FileOptions are useless to us so don't bother putting them in the
+  // language-specific slots, just put them all into uninterpreted_option.
+  let unopts = options.file-options-uninterpreted-option | make(<stretchy-vector>);
+  options.file-options-uninterpreted-option := unopts;
+
+  // UninterpretedOption is over-complex for a dynamically typed language so
+  // (at least for now) I'm taking advantage of the fact that repeated fields
+  // are represented with generically typed <stretchy-vector> and stuffing all
+  // options into it as pairs. TODO: faithfully use the descriptor.proto AST.
+  add!(unopts, pair(name, value));
+end function;
+
+// OptionName = ( SimpleName | ExtensionName ) [ dot OptionName ] .
+// Parse an option name of the form "foo", "foo.bar", "foo.(.bar.baz).quux",
+// etc. into a sequence of name parts where '.', '(', and ')' represent
+// themselves.
+define function parse-option-name
+    (parser :: <parser>) => (option :: <seq>)
+  iterate loop (parts = #(), in-extension? = #f)
+    let token = next-token(parser, msg: "while reading option name");
+    select (token.token-value)
+      '=' => reverse!(parts);   // done
+      '(' => iff(in-extension?,
+                 parse-error("nested '(' in option name not allowed"),
+                 loop(pair('(', parts), #t));
+      ')' => iff(in-extension?,
+                 loop(pair(')', parts), #f),
+                 parse-error("unexpected ')' in option name"));
+      '.' => loop(pair('.', parts), in-extension?);
+      otherwise =>
+        if (~instance?(token, <identifier-token>))
+          parse-error("only identifier token, '(', ')', or '.' in option name, got %=",
+                      token.token-text);
+        end;
+        loop(pair(token.token-text, parts), in-extension?)
+    end
+  end iterate
 end function;
 
 define function parse-message
@@ -822,7 +859,8 @@ define function parse-enum-value-options
   options
 end function;
 
-// A QualifiedIdentifier (unlike a TypeName) may not have a leading dot.
+// A QualifiedIdentifier (unlike a TypeName) may not have a leading dot
+// or specify an extension (that is, it may not contain parens).
 // Returns a sequence of string, without the intervening dots.
 // https://protobuf.com/docs/language-spec#package-declaration
 define function parse-qualified-identifier
