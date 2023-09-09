@@ -145,6 +145,7 @@ define test test-read-token-numeric-literals ()
   let inf+ = 1.0d0 / 0.0d0;
   let inf- = -1.0d0 / 0.0d0;
   check-equal("inf", inf+, read-value("inf"));
+  check-equal("+inf", inf+, read-value("+inf"));
   check-equal("-inf", inf-, read-value("-inf"));
 end test;
 

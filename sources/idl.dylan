@@ -274,9 +274,10 @@ define function read-numeric-literal
               calc-decimal-int();
               state := #"exponent";
             'i' =>
-              assert(sign == -1);
               expect(lex, "inf");
-              make(<number-token>, text: "-inf", value: -1.0d0 / 0.0d0);
+              iff(negative?(sign),
+                  make(<number-token>, text: "-inf", value: -1.0d0 / 0.0d0),
+                  make(<number-token>, text: "-inf", value: 1.0d0 / 0.0d0));
             otherwise =>
               if (text[0] == '0')
                 octal-int-token()
@@ -358,14 +359,14 @@ define function read-identifier-or-reserved-word
     end;
   end;
   let text = as(<string>, identifier);
-  if (text = "true")
-    make(<boolean-token>, text: text, value: #t)
-  elseif (text = "false")
-    make(<boolean-token>, text: text, value: #f)
-  elseif (reserved-word?(text))
-    make(<reserved-word-token>, text: text, value: as(<symbol>, text))
-  else
-    make(<identifier-token>, text: text, value: text)
+  select (text by \=)
+    "true"  => make(<boolean-token>, text: text, value: #t);
+    "false" => make(<boolean-token>, text: text, value: #f);
+    "inf"   => make(<number-token>, text: text, value: 1.0d0 / 0.0d0);
+    otherwise =>
+      iff(reserved-word?(text),
+          make(<reserved-word-token>, text: text, value: as(<symbol>, text)),
+          make(<identifier-token>, text: text, value: text));
   end
 end function;
 
