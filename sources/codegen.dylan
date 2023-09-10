@@ -15,6 +15,8 @@ Synopsis: Invoke the parser on a set of files and then
 // * Generate add-* functions for repeated fields. They will create the
 //   sequence if not done yet, and we can type the field as <seq> even if using
 //   <stretchy-vector> internally.
+//
+// * There is no way to detect whether a bool field is set. See dylan-slot-type.
 
 // I kind of prefer ".pb.dylan", for unexplainable aesthetic reasons, but
 // https://github.com/dylan-lang/opendylan/issues/1529 needs fixing first.
@@ -178,11 +180,18 @@ define method emit (gen :: <generator>, message :: <descriptor-proto>,
 
   // message class definition
   export(gen, class-name);
+  let after-class-def = make(<stretchy-vector>);
   code(gen, "define class %s (<protocol-buffer-message>)\n", class-name);
   for (field in descriptor-proto-field(message) | #[])
-    emit(gen, field, message: message, message-name: full-name);
+    let thunk = emit(gen, field, message: message, message-name: full-name);
+    if (thunk)
+      add!(after-class-def, thunk);
+    end;
   end;
   code(gen, "end class %s;\n\n", class-name);
+  for (thunk in after-class-def)
+    thunk()
+  end;
 
   for (enum in descriptor-proto-enum-type(message) | #[])
     emit(gen, enum, parent: full-name);
@@ -203,15 +212,38 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
   let local-name = dylan-name(camel-name);
   let getter = dylan-name(camel-name, parent: message-name);
   let (dylan-type-name :: <string>,
-       default-for-type :: <string>)
+       default-for-type :: <string>,
+       base-type)
     = dylan-slot-type(*file-descriptor-proto*, message, field);
   debug("<= dylan-slot-type: %=, default-for-type: %=", dylan-type-name, default-for-type);
   export(gen, getter);
   export(gen, concat(getter, "-setter"));
   code(gen, """  slot %s :: %s,
     init-value: %s,
-    init-keyword: %s:;\n""",
+    init-keyword: %s:;
+""",
        getter, dylan-type-name, default-for-type, local-name);
+  if (field.field-descriptor-proto-label
+        = $field-descriptor-proto-label-label-repeated)
+    // Repeated fields get an add-* method.
+    method ()
+      export(gen, concat("add-", getter));
+      code(gen, """define method add-%s
+    (msg :: <%s>, new :: %s) => (new :: %s)
+  let v = msg.%s;
+  if (~v)
+    v := make(<stretchy-vector>);
+    msg.%s := v;
+  end;
+  add!(v, new);
+  new
+end method add-%s;
+
+""",
+           getter, message-name, base-type, base-type, getter,
+           getter, getter);
+    end
+  end
 end method;
 
 define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
@@ -317,48 +349,51 @@ end function;
 define function dylan-slot-type
     (file :: <file-descriptor-proto>, message :: <descriptor-proto>,
      field :: <field-descriptor-proto>)
- => (dylan-type :: <string>, default :: <string>)
+ => (dylan-type :: <string>, default :: <string>, base-type :: false-or(<string>))
   let label = field-descriptor-proto-label(field);
   let camel-type = field-descriptor-proto-type-name(field);
   let syntax = file-descriptor-proto-syntax(file);
   debug("=> dylan-slot-type(%=, %=, %=, file, %=)",
         syntax, label, camel-type, descriptor-proto-name(message));
+  let (type-name, default)
+    = select (camel-type by \=)
+        "double" => values("<double-float>", "0.0d0");
+        "float"  => values("<single-float>", "0.0");
+        "int32"  => values("<int32>", "0");
+        "int64"  => values("<int64>", "0");
+        "uint32" => values("<uint32>", "0");
+        "uint64" => values("<uint64>", "0");
+        "sint32" => values("<sint32>", "0");
+        "sint64" => values("<sint64>", "0");
+        "fixed32" => values("<fixed32>", "0");
+        "fixed64" => values("<fixed64>", "0");
+        "sfixed32" => values("<sfixed32>", "0");
+        "sfixed64" => values("<sfixed64>", "0");
+        "bool" => values("<boolean>", "#f");
+        "string" => values("<string>", "");
+        "bytes" => values("<byte-vector>", "make(<byte-vector>, size: 0)");
+        otherwise =>
+          let descriptor = name-lookup(camel-type, file, message);
+          values(full-dylan-class-name(descriptor),
+                 "#f");
+      end select;
   if (label = $field-descriptor-proto-label-label-repeated)
-    values("false-or(<stretchy-vector>)", "#f")
+    values("false-or(<stretchy-vector>)",
+           "#f",
+           type-name)
   else
-    let (type-name, default)
-      = select (camel-type by \=)
-          "double" => values("<double-float>", "0.0d0");
-          "float"  => values("<single-float>", "0.0");
-          "int32"  => values("<int32>", "0");
-          "int64"  => values("<int64>", "0");
-          "uint32" => values("<uint32>", "0");
-          "uint64" => values("<uint64>", "0");
-          "sint32" => values("<sint32>", "0");
-          "sint64" => values("<sint64>", "0");
-          "fixed32" => values("<fixed32>", "0");
-          "fixed64" => values("<fixed64>", "0");
-          "sfixed32" => values("<sfixed32>", "0");
-          "sfixed64" => values("<sfixed64>", "0");
-          "bool" => values("<boolean>", "#f");
-          "string" => values("<string>", "");
-          "bytes" => values("<byte-vector>", "make(<byte-vector>, size: 0)");
-          otherwise =>
-            let descriptor = name-lookup(camel-type, file, message);
-            values(full-dylan-class-name(descriptor),
-                   "#f");
-        end select;
-    if (syntax = "proto2")
-      // TODO: for now there is no way to detect whether a bool field is set.
-      values(iff(camel-type = "bool",
-                 "<boolean>",
-                 iff(type-name = "<object>",
-                     type-name,
-                     sformat("false-or(%s)", type-name))),
-             "#f")
-    else
-      values(type-name, default)
-    end
+    select (syntax by \=)
+      "proto2" =>
+        values(iff(camel-type = "bool",
+                   "<boolean>",
+                   sformat("false-or(%s)", type-name)),
+               "#f",
+               type-name);
+      "proto3" =>
+        values(type-name, default);
+      otherwise =>
+        pb-error("syntax %= is not yet supported", syntax);
+    end select
   end
 end function;
 
