@@ -47,6 +47,10 @@ define class <generator> (<object>)
   constant slot generator-file-set :: <file-descriptor-set>
     = make(<file-descriptor-set>,
            file: make(<stretchy-vector>));
+
+  // Maps from AST nodes (descriptors) to sequences of <comment-token> which
+  // are the comments that precede the descriptor in the .proto file.
+  constant slot attached-comments :: <object-table> = make(<table>);
 end class;
 
 // Exported
@@ -54,8 +58,12 @@ define function generate-dylan-code
     (gen :: <generator>, #key)
   let file-set = gen.generator-file-set;
   for (file in gen.generator-input-files)
-    let descriptor = parse-file(gen, file);
+    let (descriptor, comments-map) = parse-file(gen, file);
     add!(file-descriptor-set-file(file-set), descriptor);
+    // Copy descriptor-attached comments from parser to generator.
+    for (tokens :: <seq> keyed-by desc in comments-map)
+      gen.attached-comments[desc] := tokens;
+    end;
   end;
   emit(gen, file-set);
   let library-name = gen.generator-library-name;
@@ -72,14 +80,14 @@ end function;
 
 define function parse-file
     (gen :: <generator>, file :: <file-locator>)
- => (descriptor :: <file-descriptor-proto>)
+ => (descriptor :: <file-descriptor-proto>, comments :: <table>)
   with-open-file (in-stream = file, direction: #"input")
     let descriptor
       = make(<file-descriptor-proto>, name: as(<string>, file));
     let lexer = make(<lexer>, stream: in-stream);
-    parse-file-stream(make(<parser>, lexer: lexer),
-                      descriptor);
-    descriptor
+    let parser = make(<parser>, lexer: lexer);
+    parse-file-stream(parser, descriptor);
+    values(descriptor, parser.attached-comments)
   end
 end function;
 
@@ -94,6 +102,17 @@ define function code
     (gen :: <generator>, format-string :: <string>, #rest args)
   apply(format, *code-stream*, format-string, args);
   force-output(*code-stream*);
+end function;
+
+define function comments
+    (gen :: <generator>, object :: <protocol-buffer-object>,
+     #key indent :: <string> = "")
+  for (token in element(gen.attached-comments, object,
+                        default: #[]))
+    for (comment in token.token-comments)
+      code(gen, sformat("%s%s\n", indent, comment.token-text));
+    end;
+  end;
 end function;
 
 define function export (gen :: <generator>, name :: <string>)
@@ -147,7 +166,6 @@ define thread variable *code-stream* :: false-or(<stream>) = #f;
 define thread variable *current-module* :: false-or(<string>) = #f;
 
 define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
-  debug("emit(<generator>, <file-descriptor-proto>) %=", file.file-descriptor-proto-name);
   let output-dir = gen.generator-output-directory;
   let absfile = as(<file-locator>, file.file-descriptor-proto-name);
   let output-file = file-locator(output-dir,
@@ -173,13 +191,13 @@ end method;
 // `parent` is provided if this is a nested message.
 define method emit (gen :: <generator>, message :: <descriptor-proto>,
                     #key parent)
-  debug("emit(<generator>, <descriptor-proto>, parent: %=) %=", parent, message.descriptor-proto-name);
   let camel-name = descriptor-proto-name(message);
   let full-name = dylan-name(camel-name, parent: parent);
   let class-name = concat("<", full-name, ">");
 
   // message class definition
   export(gen, class-name);
+  comments(gen, message);
   let after-class-def = make(<stretchy-vector>);
   code(gen, "define class %s (<protocol-buffer-message>)\n", class-name);
   for (field in descriptor-proto-field(message) | #[])
@@ -206,8 +224,6 @@ end method;
 
 define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
                     #key message :: <descriptor-proto>, message-name :: <string>)
-  debug("emit(<generator>, <field-descriptor-proto>, message-name: %=) %=",
-        message-name, field.field-descriptor-proto-name);
   let camel-name = field-descriptor-proto-name(field);
   let local-name = dylan-name(camel-name);
   let getter = dylan-name(camel-name, parent: message-name);
@@ -215,9 +231,9 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
        default-for-type :: <string>,
        base-type)
     = dylan-slot-type(*file-descriptor-proto*, message, field);
-  debug("<= dylan-slot-type: %=, default-for-type: %=", dylan-type-name, default-for-type);
   export(gen, getter);
   export(gen, concat(getter, "-setter"));
+  comments(gen, field, indent: "  ");
   code(gen, """  slot %s :: %s,
     init-value: %s,
     init-keyword: %s:;
@@ -248,12 +264,12 @@ end method;
 
 define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
                     #key parent)
-  debug("emit(<generator>, <enum-descriptor-proto>, parent: %=) %=", parent, enum.enum-descriptor-proto-name);
   let camel-name = enum-descriptor-proto-name(enum);
   let local-name = dylan-name(camel-name);
   let full-name = dylan-name(camel-name, parent: parent);
   let class-name = concat("<", full-name, ">");
   export(gen, class-name);
+  comments(gen, enum);
   // No need to export -name or -value accessors because the API is to call
   // enum-value and enum-value-name on the value constants, and they're
   // inherited from the superclass.
@@ -267,11 +283,11 @@ end method;
 define method emit
     (gen :: <generator>, enum-value :: <enum-value-descriptor-proto>,
      #key parent :: <string>)
-  debug("emit(<generator>, <enum-value-descriptor-proto>, parent: %=) %=", parent, enum-value.enum-value-descriptor-proto-name);
   let camel-name = enum-value-descriptor-proto-name(enum-value);
   let constant-name = concat("$", dylan-name(camel-name, parent: parent));
   let value = enum-value-descriptor-proto-number(enum-value);
   export(gen, constant-name);
+  comments(gen, enum-value);
   code(gen, """define constant %s :: <%s>
   = make(<%s>,
          name: %=,
@@ -282,7 +298,8 @@ end method;
 
 define method emit (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
                     #key parent)
-  debug("emit(<generator>, <oneof-descriptor-proto>, parent: %=) %=", parent, oneof.oneof-descriptor-proto-name);
+  comments(gen, oneof);
+  // TODO
   let name = dylan-name(oneof-descriptor-proto-name(oneof), parent: parent);
 end method;
 
@@ -353,8 +370,6 @@ define function dylan-slot-type
   let label = field-descriptor-proto-label(field);
   let camel-type = field-descriptor-proto-type-name(field);
   let syntax = file-descriptor-proto-syntax(file);
-  debug("=> dylan-slot-type(%=, %=, %=, file, %=)",
-        syntax, label, camel-type, descriptor-proto-name(message));
   let (type-name, default)
     = select (camel-type by \=)
         "double" => values("<double-float>", "0.0d0");
@@ -402,7 +417,6 @@ end function;
 define function full-dylan-class-name
     (descriptor :: <protocol-buffer-object>) => (name :: <string>)
   iterate loop (desc = descriptor, names = #())
-    debug("full-dylan-class-name: desc: %=, names: %=", desc, names);
     if (desc)
       loop(desc.descriptor-parent,
            pair(desc.descriptor-name, names))
@@ -445,7 +459,6 @@ define function lookup
     (orig :: <string>, names :: <seq>, root :: <protocol-buffer-object>)
  => (descriptor :: false-or(<protocol-buffer-object>))
   iterate loop (i = 0, descriptor = root)
-    debug("lookup: loop(%d, %s)", i, descriptor);
     if (i >= names.size)
       descriptor
     else
@@ -457,7 +470,6 @@ define function lookup
       let pos
         = messages & position(messages, name,
                               test: method (name, msg)
-                                      debug("name: %=, msg: %=", name, msg);
                                       descriptor-proto-name(msg) = name
                                     end);
       let message = pos & messages[pos];
@@ -472,7 +484,6 @@ define function lookup
         let pos
           = enums & position(enums, name,
                              test: method (name, enum)
-                                     debug("name: %=, msg: %=", name, enum);
                                      enum-descriptor-proto-name(enum) = name
                                    end);
         pos & enums[pos]

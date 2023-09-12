@@ -1,9 +1,19 @@
 Module: protocol-buffers-test-suite
+Synopsis: Tests for idl.dylan
 
-define function read-all (input :: <string>) => (tokens :: <seq>)
+
+////
+//// lexer tests
+////
+
+define function read-all
+    (input :: <string>, #key whitespace? = #t, comments? = #t) => (tokens :: <seq>)
   let tokens = make(<stretchy-vector>);
   with-input-from-string (stream = input)
-    let lex = make(<lexer>, stream: stream, whitespace?: #t, comments?: #t);
+    let lex = make(<lexer>,
+                   stream: stream,
+                   whitespace?: whitespace?,
+                   comments?: comments?);
     let tok = #t;
     while (tok)
       tok := read-token(lex);
@@ -164,6 +174,21 @@ define test test-read-identifier ()
               read-values("a.(foo.bar).b"),
               #("a", '.', '(', "foo", '.', "bar", ')', '.', "b"));
 end test;
+
+define test test-attached-comments ()
+  let tokens = read-all("""// test\nmessage Foo\n""", whitespace?: #f);
+  assert-equal(3, tokens.size);
+  for (token in tokens, i from 0)
+    test-output("token comments size: %d %d\n", i, token.token-comments.size)
+  end;
+  assert-equal(1, tokens[1].token-comments.size);
+end test;
+
+
+////
+//// parser tests
+////
+
 
 define function parser-for (input :: <string>) => (p :: <parser>)
   make(<parser>,

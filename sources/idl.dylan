@@ -1,11 +1,16 @@
 Module: protocol-buffers-impl
 Synopsis: Ad-hoc lexer and parser for .proto Interface Definition Language
 
+
 // References used while writing this parser:
 // * https://protobuf.dev/reference/protobuf/proto2-spec/
 // * https://protobuf.dev/reference/protobuf/proto3-spec/
 // * https://protobuf.com/docs/language-spec#character-classes
 // * https://github.com/bufbuild/protocompile/blob/main/parser/
+
+// The reader (read-token) attaches comments to the following non-comment,
+// non-whitespace token for use by the code generator. The parser (next-token,
+// expect-token) never sees or cares about comments or whitespace.
 
 
 define class <token> (<object>)
@@ -13,6 +18,9 @@ define class <token> (<object>)
   constant slot token-value  :: <object>, required-init-keyword: value:;
   constant slot token-line   :: <int>,    required-init-keyword: line:;
   constant slot token-column :: <int>,    required-init-keyword: column:;
+
+  // <comment-token>s attached to (i.e., preceding) this token.
+  slot token-comments :: <stretchy-vector> = make(<stretchy-vector>);
 end class;
 
 define method print-object
@@ -58,15 +66,31 @@ define inline function reserved-word? (text :: <string>) => (_ :: <bool>)
 end function;
 
 define class <lexer> (<object>)
+  constant slot lexer-stream :: <stream>,
+    required-init-keyword: stream:;
+
   slot lexer-line :: <int> = 1;
   slot lexer-column :: <int> = 0;
-  constant slot lexer-stream :: <stream>, required-init-keyword: stream:;
-  // This is optional and solely for use in error messages.
-  // Using <string> instead of <pathname> to avoid dependency on System library.
-  constant slot lexer-file :: <string> = "<stream>", init-keyword: file:;
-  constant slot lexer-whitespace? :: <bool> = #f, init-keyword: whitespace?:;
-  constant slot lexer-comments? :: <bool> = #f, init-keyword: comments?:;
+
+  // Solely for use in error messages.
+  constant slot lexer-file :: <string> = "<stream>",
+    init-keyword: file:;
+
+  // Whether next-token should return whitespace tokens or drop them.
+  constant slot lexer-whitespace? :: <bool> = #f,
+    init-keyword: whitespace?:;
+
+  // Whether next-token should return comment tokens or drop them.
+  constant slot lexer-comments? :: <bool> = #t,
+    init-keyword: comments?:;
+  // Sequence of consecutively returned comment tokens to be attached to the
+  // next non-comment token for output by the code generator.
+  slot lexer-comments :: <stretchy-vector> = make(<stretchy-vector>);
 end class;
+
+define function clear-comments (lex :: <lexer>)
+  lex.lexer-comments := make(<stretchy-vector>);
+end;
 
 define generic read-token
   (lex :: <lexer>) => (token :: false-or(<token>));
@@ -139,7 +163,17 @@ end function;
 define method read-token
     (lex :: <lexer>) => (token :: false-or(<token>))
   dynamic-bind (*lexer* = lex)
-    read-token-1(lex)
+    let token = read-token-1(lex);
+    // Attach comments
+    if (instance?(token, <comment-token>))
+      add!(lex.lexer-comments, token);
+    elseif (token
+              & ~instance?(token, <whitespace-token>)
+              & ~empty?(lex.lexer-comments))
+      token.token-comments := lex.lexer-comments;
+      clear-comments(lex);
+    end;
+    token
   end
 end method;
 
@@ -156,9 +190,7 @@ define function read-token-1
           read-token-1(lex));
     '/' =>
       let token = read-comment(lex);
-      iff(lex.lexer-comments?,
-          token,
-          read-token-1(lex));
+      iff(lex.lexer-comments?, token, read-token-1(lex));
     '"', '\'' =>
       read-string-literal(lex);
     '=', '{', '}', '[', ']', '(', ')', '<', '>', ':', ';', ',' =>
@@ -370,7 +402,8 @@ define function read-identifier-or-reserved-word
   end
 end function;
 
-define function read-comment (lex :: <lexer>) => (token :: <comment-token>)
+define function read-comment
+    (lex :: <lexer>) => (token :: <comment-token>)
   assert('/' == consume-char(lex));
   let comment = make(<stretchy-vector>);
   add!(comment, '/');
@@ -557,14 +590,43 @@ end function;
 
 define class <parser> (<object>)
   constant slot %lexer :: <lexer>, required-init-keyword: lexer:;
+  slot peeked-token :: false-or(<token>) = #f;
+
+  // Maps AST nodes (<descriptor-proto> et al) to <token>s that contain
+  // comments, so the comments can be carried through to generated code.
+  constant slot attached-comments = make(<table>);
+
+  // Previous non-whitespace, non-comment token. Initial use is to determine
+  // whether a comment is an end-of-line comment or not, by checking whether
+  // it has the same line as this token.
+  slot previous-token :: false-or(<token>) = #f;
 end class;
 
 define function next-token
     (parser :: <parser>, #key msg) => (token :: false-or(<token>))
-  read-token(parser.%lexer)
-    | (msg & parse-error(msg))
+  let peeked = parser.peeked-token;
+  if (peeked)
+    parser.peeked-token := #f;
+    peeked
+  else
+    let token = read-token(parser.%lexer);
+    while (instance?(token, <comment-token>))
+      token := read-token(parser.%lexer);
+    end;
+    if (token
+          & ~instance?(token, <whitespace-token>)
+          & ~instance?(token, <comment-token>))
+      parser.previous-token := token;
+    end;
+    token | (msg & parse-error(msg))
+  end
 end function;
 
+define function peek-token
+    (parser :: <parser>) => (token :: false-or(<token>))
+  parser.peeked-token
+    | (parser.peeked-token := read-token(parser.%lexer))
+end function;
 
 define generic expect-token
     (parser :: <parser>, token-specifier :: <object>) => (token :: <token>);
@@ -598,12 +660,32 @@ end method;
 // Retrieve and discard tokens up to the next semicolon.
 define function discard-statement (parser :: <parser>) => (#rest tokens)
   iterate loop (t = next-token(parser), tokens = #())
-    if (t.token-value == ';')
-      reverse!(tokens)
-    else
-      loop(next-token(parser), pair(t, tokens))
+    if (t)
+      if (t.token-value == ';')
+        reverse!(tokens)
+      else
+        loop(next-token(parser), pair(t, tokens))
+      end
     end
   end
+end function;
+
+define function maybe-attach-comments-to
+    (parser :: <parser>, descriptor :: <protocol-buffer-object>, token :: <token>)
+  if (~empty?(token.token-comments))
+    let comments
+      = element(parser.attached-comments, descriptor, default: #f)
+          | make(<stretchy-vector>);
+    add!(comments, token);
+    parser.attached-comments[descriptor] := comments;
+  end;
+end function;
+
+define function end-of-line-comment?
+    (parser :: <parser>, token :: <token>) => (eol? :: <bool>)
+  parser.previous-token
+    & instance?(token, <comment-token>)
+    & (parser.previous-token.token-line == token.token-line)
 end function;
 
 // Fills in the slots of `file-descriptor` based on the parse, but the
@@ -614,37 +696,45 @@ define function parse-file-stream
     if (token)
       select (token.token-value)
         #"syntax" =>
+          maybe-attach-comments-to(parser, file, token);
           expect-token(parser, "=");
           let token = expect-token(parser, #("proto2", "proto3", "editions"));
           file-descriptor-proto-syntax(file)
             := token.token-text;
           expect-token(parser, ";");
         #"package" =>
+          maybe-attach-comments-to(parser, file, token); // not quite right
           let package-name = parse-qualified-identifier(parser);
           file-descriptor-proto-package(file)
             := join(package-name, ".");
         #"option" =>
+          maybe-attach-comments-to(parser, file, token); // not quite right
           let options = file.file-descriptor-proto-options | make(<file-options>);
           file.file-descriptor-proto-options := options;
           parse-file-option(parser, options);
         #"message" =>
+          // TODO: change all the code like this to call the add-* function instead.
           if (~file-descriptor-proto-message-type(file))
             file-descriptor-proto-message-type(file)
               := make(<stretchy-vector>);
           end;
-          add!(file-descriptor-proto-message-type(file),
-               parse-message(parser, file, #()));
+          let message = parse-message(parser, file, #(), token);
+          add!(file-descriptor-proto-message-type(file), message);
         #"enum" =>
           if (~file-descriptor-proto-enum-type(file))
             file-descriptor-proto-enum-type(file)
               := make(<stretchy-vector>);
           end;
           add!(file-descriptor-proto-enum-type(file),
-               parse-enum(parser, #()));
+               parse-enum(parser, #(), token));
         otherwise =>
-          // sformat is because the default handler prints error messages with
-          // the common-dylan version format, which doesn't call print-object.
-          parse-error("unexpected token: %s", sformat("%=", token));
+          // Allow whitespace and comments to be ignored.
+          if (~instance?(token, <comment-token>)
+                & ~instance?(token, <whitespace-token>))
+            // Call sformat here because the default handler prints error messages with
+            // the common-dylan version format, which doesn't call print-object.
+            parse-error("unexpected token: %s", sformat("%=", token));
+          end;
       end select;
       loop(next-token(parser));
     end if;
@@ -653,8 +743,7 @@ end function;
 
 define function parse-file-option
     (parser :: <parser>, options :: <file-options>) => ()
-  let name :: <seq> = parse-option-name(parser);
-  expect-token(parser, "=");
+  let name :: <seq> = parse-option-name(parser); // consumes trailing '='
   let value = token-value(next-token(parser, msg: "while parsing option value"));
   expect-token(parser, ";");
 
@@ -698,7 +787,7 @@ define function parse-option-name
 end function;
 
 define function parse-message
-    (parser :: <parser>, file :: <file-descriptor-proto>, parent-names :: <list>)
+    (parser :: <parser>, file :: <file-descriptor-proto>, parent-names :: <list>, message-token :: <token>)
  => (msg :: <descriptor-proto>)
   let name-token = next-token(parser);
   let name = name-token.token-text;
@@ -711,7 +800,7 @@ define function parse-message
   let syntax   = file-descriptor-proto-syntax(file);
   block (done)
     while (#t)
-      let token = parser.next-token;
+      let token = next-token(parser);
       select (token.token-value)
         #"repeated", #"optional", #"required" =>
           add!(fields, parse-message-field(parser, syntax, label: token));
@@ -730,9 +819,9 @@ define function parse-message
         #"reserved" =>
           discard-statement(parser); // TODO: parse-reserved-field-numbers(parser);
         #"message" =>
-          add!(messages, parse-message(parser, file, name-path));
+          add!(messages, parse-message(parser, file, name-path, token));
         #"enum" =>
-          add!(enums, parse-enum(parser, name-path));
+          add!(enums, parse-enum(parser, name-path, token));
         #"extend" =>
           discard-statement(parser); // TODO: parse-extend(parser, message-names);
         ';' =>                    // empty statement,
@@ -740,12 +829,15 @@ define function parse-message
         '}' =>
           done();
         otherwise =>
-          if (instance?(token, <identifier-token>))
-            // Looking at a proto3 message-, enum-, or group-typed field.
-            add!(fields, parse-message-field(parser, syntax, type: token));
-          else
-            parse-error("unexpected message element starting with %s",
-                        sformat("%=", token));
+          select (token by instance?)
+            <identifier-token> =>
+              // Looking at a proto3 message-, enum-, or group-typed field.
+              add!(fields, parse-message-field(parser, syntax, type: token));
+            <comment-token> =>
+              #f;
+            otherwise =>
+              parse-error("unexpected message element starting with %s",
+                          sformat("%=", token));
           end;
       end select;
     end while;
@@ -767,11 +859,12 @@ define function parse-message
   for (enum in enums)
     enum.descriptor-parent := message;
   end;
+  maybe-attach-comments-to(parser, message, message-token);
   message
 end function;
 
 define function parse-enum
-    (parser :: <parser>, parent-names :: <list>)
+    (parser :: <parser>, parent-names :: <list>, enum-token :: <token>)
  => (enum :: <enum-descriptor-proto>)
   let name-token = next-token(parser);
   let name = name-token.token-text;
@@ -781,7 +874,7 @@ define function parse-enum
   let options = make(<enum-options>);
   block (done)
     while (#t)
-      let token = parser.next-token;
+      let token = next-token(parser);
       select (token.token-value)
         #"option" =>
           discard-statement(parser);
@@ -807,6 +900,7 @@ define function parse-enum
   for (field in fields)
     field.descriptor-parent := enum;
   end;
+  maybe-attach-comments-to(parser, enum, enum-token);
   enum
 end function;
 
@@ -832,6 +926,7 @@ define function parse-enum-field
            number: number.token-value,
            options: options);
   options & (options.descriptor-parent := enum-value);
+  maybe-attach-comments-to(parser, enum-value, name);
   enum-value
 end function;
 
@@ -902,6 +997,7 @@ define function parse-message-field
     let (d, o) = parse-field-options(parser);
     default := d;
     options := o;
+    // TODO: does this need expect-token(parser, ";")? write a test.
   end;
   let field
     = make(<field-descriptor-proto>,
@@ -920,6 +1016,23 @@ define function parse-message-field
            proto3-optional:
              label & label.token-text = "optional" & syntax = "proto3");
   options & (options.descriptor-parent := field);
+
+  // Check whether there's an end-of-line comment for this field and add it to
+  // the label or type token.
+  //
+  // An alternative would be to have the lexer save the first non-comment token
+  // on a line and attach the EOL comment to that, but I didn't think of it
+  // until now and since fields make up the bulk of the lines and EOL comments
+  // aren't that common it doesn't seem worth it, at least for now.
+  let eol-comment = peek-token(parser);
+  if (eol-comment & end-of-line-comment?(parser, eol-comment))
+    add!((label | type).token-comments, eol-comment);
+    // The lexer has already collected this comment so clear it or it will also
+    // be added as a full-line comment before the next field.
+    clear-comments(parser.%lexer);
+  end;
+  maybe-attach-comments-to(parser, field, label);
+  maybe-attach-comments-to(parser, field, type);
   field
 end function parse-message-field;
 

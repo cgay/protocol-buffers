@@ -7,6 +7,12 @@ define sealed abstract class <protocol-buffer-object> (<object>)
   // to the message/enum definition. FileDescriptorSet has no
   // parent. FileDescriptorProto may or may not have a parent. Messages, enums,
   // fields, etc. always have a parent.
+  //
+  // TODO: this was a mistake. Because the .proto AST is implemented with
+  // generated protobufs it was convenient to add this here, but this class is
+  // the parent of every single run-time protobuf object so nothing should be
+  // added to it unless absolutely necessary.
+  //
   slot descriptor-parent :: false-or(<protocol-buffer-object>) = #f,
     init-keyword: parent:;
 end class;
@@ -33,6 +39,8 @@ define open abstract class <protocol-buffer-message> (<protocol-buffer-object>)
   // need to verify this in the spec, but I believe if it has been explicitly
   // set to the default value the value IS written during serialization and in
   // proto3 the default value is never written on the wire.
+  //
+  // TODO: have <proto2-message> and <proto3-message>?
   slot %field-is-set :: <bit-vector>;
 end class;
 

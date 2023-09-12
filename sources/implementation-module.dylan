@@ -89,5 +89,6 @@ define module protocol-buffers-impl
     // For testing only
     dylan-name,
     dylan-class-name,
-    parse-option-name;
+    parse-option-name,
+    token-comments;
 end module;
