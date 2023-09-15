@@ -23,35 +23,9 @@ end command-line;
 */
 
 define function main
-    (name :: <string>, arguments :: <vector>)
+    ()
   block ()
-    let output-directory
-      = make(<parameter-option>,
-             names: #("o", "output-directory"),
-             default: #f,
-             help: "Directory in which to write files, one for each input file"
-               " and one for each .proto package declaration found.");
-    let library-name
-      = make(<parameter-option>,
-             names: #("library-name"),
-             default: #f,
-             help: "Name of generated library. If not provided, no library file"
-               " is generated.");
-    let input-files
-      = make(<positional-option>,
-             names: #("input-files"),
-             required?: #t,
-             repeated?: #t,
-             help: ".proto files to compile. All in the same package.");
-    let parser
-      = make(<command-line-parser>,
-             help: "Generate Dylan code from .proto files.",
-             options: list(output-directory, library-name, input-files));
-    parse-command-line(parser, application-arguments());
-    for (input in get-option-value(parser, "input-files"))
-      format-out("input: %s\n", input);
-      force-out();
-    end;
+    let parser = parse-arguments(application-arguments());
     let files
       = map(curry(as, <file-locator>), get-option-value(parser, "input-files"));
     let out-dir
@@ -72,5 +46,32 @@ define function main
   exit-application(0);
 end function;
 
-main(application-name(),
-     application-arguments());
+define function parse-arguments
+    (arguments :: <vector>) => (p :: <command-line-parser>)
+  let output-directory
+    = make(<parameter-option>,
+           names: #("o", "output-directory"),
+           default: #f,
+           help: "Directory in which to write files, one for each input file"
+             " and one for each .proto package declaration found.");
+  let library-name
+    = make(<parameter-option>,
+           names: #("library-name"),
+           default: #f,
+           help: "Name of generated library. If not provided, no library file"
+             " is generated.");
+  let input-files
+    = make(<positional-option>,
+           names: #("input-files"),
+           required?: #t,
+           repeated?: #t,
+           help: ".proto files to compile. All in the same package.");
+  let parser
+    = make(<command-line-parser>,
+           help: "Generate Dylan code from .proto files.",
+           options: list(output-directory, library-name, input-files));
+  parse-command-line(parser, application-arguments());
+  parser
+end function;
+
+main();

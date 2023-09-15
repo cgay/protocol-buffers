@@ -53,9 +53,13 @@ define class <generator> (<object>)
   constant slot attached-comments :: <object-table> = make(<table>);
 end class;
 
+define function app-name ()
+  locator-name(as(<file-locator>, application-filename()))
+end function;
+
 // Exported
 define function generate-dylan-code
-    (gen :: <generator>, #key)
+    (gen :: <generator>)
   let file-set = gen.generator-file-set;
   for (file in gen.generator-input-files)
     let (descriptor, comments-map) = parse-file(gen, file);
@@ -75,6 +79,8 @@ define function generate-dylan-code
                     if-exists: #"replace")
       format(stream, $library-template, library-name, library-name);
     end;
+    format-out("%s wrote %s\n", app-name(), library-file);
+    force-out();
   end;
 end function;
 
@@ -157,6 +163,8 @@ define function emit-module-file
                 ",\n"),
            module-name);
   end;
+  format-out("%s wrote %s\n", app-name(), module-file);
+  force-out();
 end function;
 
 
@@ -186,6 +194,8 @@ define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
       end;
     end dynamic-bind;
   end with-open-file;
+  format-out("%s wrote %s\n", app-name(), output-file);
+  force-out();
 end method;
 
 // `parent` is provided if this is a nested message.
