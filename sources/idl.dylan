@@ -713,20 +713,10 @@ define function parse-file-stream
           file.file-descriptor-proto-options := options;
           parse-file-option(parser, options);
         #"message" =>
-          // TODO: change all the code like this to call the add-* function instead.
-          if (~file-descriptor-proto-message-type(file))
-            file-descriptor-proto-message-type(file)
-              := make(<stretchy-vector>);
-          end;
           let message = parse-message(parser, file, #(), token);
-          add!(file-descriptor-proto-message-type(file), message);
+          add-file-descriptor-proto-message-type(file, message);
         #"enum" =>
-          if (~file-descriptor-proto-enum-type(file))
-            file-descriptor-proto-enum-type(file)
-              := make(<stretchy-vector>);
-          end;
-          add!(file-descriptor-proto-enum-type(file),
-               parse-enum(parser, #(), token));
+          add-file-descriptor-proto-enum-type(file, parse-enum(parser, #(), token));
         otherwise =>
           // Allow whitespace and comments to be ignored.
           if (~instance?(token, <comment-token>)
@@ -755,8 +745,10 @@ define function parse-file-option
   // UninterpretedOption is over-complex for a dynamically typed language so
   // (at least for now) I'm taking advantage of the fact that repeated fields
   // are represented with generically typed <stretchy-vector> and stuffing all
-  // options into it as pairs. TODO: faithfully use the descriptor.proto AST.
+  // options into it as pairs.
   add!(unopts, pair(name, value));
+  // TODO: faithfully use the descriptor.proto AST:
+  // add-file-options-uninterpreted-option(options, option);
 end function;
 
 // OptionName = ( SimpleName | ExtensionName ) [ dot OptionName ] .
