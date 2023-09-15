@@ -22,6 +22,7 @@ Synopsis: Invoke the parser on a set of files and then
 // https://github.com/dylan-lang/opendylan/issues/1529 needs fixing first.
 define constant $generated-file-suffix :: <string> = "-pb.dylan";
 define constant $generated-module-suffix :: <string> = "-module-pb.dylan";
+define constant $generated-library-suffix :: <string> = "-library-pb.dylan";
 
 
 // Callers should normally supply two different file streams.
@@ -73,7 +74,8 @@ define function generate-dylan-code
   let library-name = gen.generator-library-name;
   if (library-name)
     let output-dir = gen.generator-output-directory;
-    let library-file = file-locator(output-dir, library-name);
+    let library-file
+      = file-locator(output-dir, concat(library-name, $generated-library-suffix));
     with-open-file (stream = library-file,
                     direction: #"output",
                     if-exists: #"replace")
