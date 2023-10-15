@@ -8,8 +8,10 @@ Synopsis: Ad-hoc parser for .proto Interface Definition Language
 // * https://protobuf.com/docs/language-spec#character-classes
 // * https://github.com/bufbuild/protocompile/blob/main/parser/
 
-// The parser (next-token, expect-token) never sees or cares about comments or
-// whitespace.
+// The parser (next-token, expect-token) never sees or cares about whitespace.
+
+// TODO: 2_147_483_646 (2^31 - 2) for message set wire format
+define constant $max-field-number :: <int> = 536_870_911;
 
 define class <parse-error> (<protocol-buffer-error>) end;
 
@@ -249,7 +251,7 @@ define function parse-message
         #"extensions" =>
           discard-statement(parser); // TODO: parse-message-extensions(parser);
         #"reserved" =>
-          discard-statement(parser); // TODO: parse-reserved-field-numbers(parser);
+          parse-reserved-field-spec(parser, message);
         #"message" =>
           add-descriptor-proto-nested-type
             (message, parse-message(parser, file, name-path, token));
@@ -393,6 +395,70 @@ define function parse-qualified-identifier
       reverse!(pair(name, names))
     end
   end
+end function;
+
+// Parse reserved fields and add them to reserved_range and reserved_name in
+// message. Examples:
+//   reserved 10 to 20, 50 to 100, 20000 to max;
+//   reserved "foo", "bar", "baz";
+define function parse-reserved-field-spec
+    (parser :: <parser>, message :: <descriptor-proto>) => ()
+  // TODO: check these after entire message parsed.
+  //  * message set wire format changes 'max' value
+  //  * field name may not be used by message field.
+  //  * field number may not be used by message field
+  //  * ranges may not overlap each other or extension ranges.
+  iterate loop (token = next-token(parser))
+    let value = token.token-value;
+    select (token by instance?)
+      <string-token> =>
+        if (value.size == 0
+              | ~alphabetic?(value[0])
+              | ~alphanumeric?(value))
+          parse-error("reserved field name not a valid identifier: %s",
+                      sformat("%s", value));
+        end;
+        add-descriptor-proto-reserved-name(message, value);
+        if (',' == token-value(expect-token(parser, #[";", ","])))
+          loop(next-token(parser));
+        end;
+      <number-token> =>
+        if (~instance?(value, <int>)
+              | value < 1
+              | value > $max-field-number)
+          parse-error("reserved fields must be integers in the range 1-%d: %s",
+                      $max-field-number, sformat("%s", token));
+        end;
+        let range = make(<descriptor-proto-reserved-range>, start: value, end: value);
+        add-descriptor-proto-reserved-range(message, range);
+        let punct = next-token(parser);
+        select (punct.token-value by \=)
+          ';' =>
+            #f;                 // done
+          ',' =>
+            loop(next-token(parser));
+          #"to" =>
+            let token2 = next-token(parser);
+            let value2 = token2.token-value;
+            if (value2 = #"max")
+              value2 := $max-field-number;
+            end;
+            if (~instance?(value2, <int>) | value2 < value)
+              parse-error("invalid reserved range end: %s", sformat("%s", token2));
+            end;
+            descriptor-proto-reserved-range-end(range) := value2;
+            if (',' == token-value(expect-token(parser, #[";", ","])))
+              loop(next-token(parser));
+            end;
+          otherwise =>
+            parse-error("unexpected token %s, want semicolon, comma or 'to'",
+                        sformat("%s", punct));
+        end;
+      otherwise =>
+        parse-error("unexpected token %s, want field name or number",
+                    sformat("%s", token));
+    end select
+  end iterate
 end function;
 
 define function parse-message-field

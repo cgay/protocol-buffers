@@ -76,7 +76,12 @@ define module protocol-buffers-impl
 
     // Parser API
     <parser>,
+    <parse-error>,
+    next-token,
     parse-file-stream,
+    parse-message,
+    $syntax-proto2,
+    $syntax-proto3,
 
     // Code generator API
     <generator>,

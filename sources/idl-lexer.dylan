@@ -46,8 +46,8 @@ define method make
 end method;
 
 define class <punctuation-token>   (<token>) end; // {, }, =, etc.
-define class <reserved-word-token> (<token>) end;
 define class <identifier-token>    (<token>) end;
+define class <reserved-word-token> (<identifier-token>) end;
 define class <number-token>        (<token>) end;
 define class <string-token>        (<token>) end;
 define class <boolean-token>       (<token>) end;
@@ -398,6 +398,7 @@ define function read-identifier-or-reserved-word
     "false" => make(<boolean-token>, text: text, value: #f);
     "inf"   => make(<number-token>, text: text, value: 1.0d0 / 0.0d0);
     otherwise =>
+      // TODO: reserved words ARE identifiers so really should have the same value type
       iff(reserved-word?(text),
           make(<reserved-word-token>, text: text, value: as(<symbol>, text)),
           make(<identifier-token>, text: text, value: text));
