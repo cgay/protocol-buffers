@@ -187,7 +187,12 @@ define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
     dynamic-bind (*current-module* = #f,
                   *code-stream* = stream,
                   *file-descriptor-proto* = file)
-      code(gen, "Module: %s\n\n", dylan-module-name(gen, file));
+      code(gen,
+           """
+           Module: %s
+
+
+           """, dylan-module-name(gen, file));
       for (enum in file-descriptor-proto-enum-type(file) | #[])
         emit(gen, enum);
       end;
@@ -211,14 +216,23 @@ define method emit (gen :: <generator>, message :: <descriptor-proto>,
   export(gen, class-name);
   comments(gen, message);
   let after-class-def = make(<stretchy-vector>);
-  code(gen, "define class %s (<protocol-buffer-message>)\n", class-name);
+  code(gen,
+       """
+       define class %s (<protocol-buffer-message>)
+
+       """, class-name);
   for (field in descriptor-proto-field(message) | #[])
     let thunk = emit(gen, field, message: message, message-name: full-name);
     if (thunk)
       add!(after-class-def, thunk);
     end;
   end;
-  code(gen, "end class %s;\n\n", class-name);
+  code(gen,
+       """
+       end class %s;
+
+
+       """, class-name);
   for (thunk in after-class-def)
     thunk()
   end;
@@ -246,28 +260,34 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
   export(gen, getter);
   export(gen, concat(getter, "-setter"));
   comments(gen, field, indent: "  ");
-  code(gen, """  slot %s :: %s,
-    init-value: %s,
-    init-keyword: %s:;
-""",
+  code(gen,
+       """
+         slot %s :: %s,
+           init-value: %s,
+           init-keyword: %s:;
+
+       """,
        getter, dylan-type-name, default-for-type, local-name);
   if (field.field-descriptor-proto-label
         = $field-descriptor-proto-label-label-repeated)
     // Repeated fields get an add-* method.
     method ()
       export(gen, concat("add-", getter));
-      code(gen, """define method add-%s
-    (msg :: <%s>, new :: %s) => (new :: %s)
-  let v = msg.%s;
-  if (~v)
-    v := make(<stretchy-vector>);
-    msg.%s := v;
-  end;
-  add!(v, new);
-  new
-end method add-%s;
+      code(gen,
+           """
+           define method add-%s
+               (msg :: <%s>, new :: %s) => (new :: %s)
+             let v = msg.%s;
+             if (~v)
+               v := make(<stretchy-vector>);
+               msg.%s := v;
+             end;
+             add!(v, new);
+             new
+           end method add-%s;
 
-""",
+
+           """,
            getter, message-name, base-type, base-type, getter,
            getter, getter);
     end
@@ -285,7 +305,12 @@ define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
   // No need to export -name or -value accessors because the API is to call
   // enum-value and enum-value-name on the value constants, and they're
   // inherited from the superclass.
-  code(gen, "define class %s (<protocol-buffer-enum>) end;\n\n", class-name);
+  code(gen,
+       """
+       define class %s (<protocol-buffer-enum>) end;
+
+
+       """, class-name);
   for (enum-value in enum-descriptor-proto-value(enum) | #[])
     emit(gen, enum-value, parent: full-name)
   end;
@@ -300,11 +325,14 @@ define method emit
   let value = enum-value-descriptor-proto-number(enum-value);
   export(gen, constant-name);
   comments(gen, enum-value);
-  code(gen, """define constant %s :: <%s>
-  = make(<%s>,
-         name: %=,
-         value: %d);
-""",
+  code(gen,
+       """
+       define constant %s :: <%s>
+         = make(<%s>,
+                name: %=,
+                value: %d);
+
+       """,
        constant-name, parent, parent, camel-name, value);
 end method;
 
@@ -316,27 +344,31 @@ define method emit (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
 end method;
 
 define constant $library-template
-  = """Module: dylan-user
-Synopsis: Library definition generated from .proto files by pbgen.
+  = """
+    Module: dylan-user
+    Synopsis: Library definition generated from .proto files by pbgen.
 
-define library %s
-  use common-dylan;
-  use protocol-buffers;
-end library %s;
-""";
+    define library %s
+      use common-dylan;
+      use protocol-buffers;
+    end library %s;
+
+    """;
 
 define constant $module-template
-  = """Module: dylan-user
-Synopsis: Code generated for package %= by pbgen.
+  = """
+    Module: dylan-user
+    Synopsis: Code generated for package %= by pbgen.
 
-define module %s
-  use common-dylan;
-  use protocol-buffers;
+    define module %s
+      use common-dylan;
+      use protocol-buffers;
 
-  export
-%s;
-end module %s;
-""";
+      export
+    %s;
+    end module %s;
+
+    """;
 
 define function dylan-module-name
     (gen :: <generator>, file :: <file-descriptor-proto>)
@@ -425,7 +457,7 @@ define function dylan-slot-type
 end function;
 
 // Determine the Dylan name of the descriptor by following its path to the
-// root. I
+// root.
 define function full-dylan-class-name
     (descriptor :: <protocol-buffer-object>) => (name :: <string>)
   iterate loop (desc = descriptor, names = #())
