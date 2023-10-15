@@ -38,16 +38,17 @@ define test test-parse-reserved-field-spec/good ()
   // Check the ranges
   let got-ranges = descriptor-proto-reserved-range(msg);
   let want-ranges
-    = vector(make(<descriptor-proto-reserved-range>, start: 10, end: 10),
-             make(<descriptor-proto-reserved-range>, start: 20, end: 30),
-             make(<descriptor-proto-reserved-range>, start: 40, end: 536_870_911));
+    = vector(make(<descriptor-proto-reserved-range>, start: 10, end: 11),
+             make(<descriptor-proto-reserved-range>, start: 20, end: 31),
+             make(<descriptor-proto-reserved-range>, start: 40, end: 536_870_912));
   assert-equal(want-ranges.size, got-ranges.size);
+  assert-equal(11, got-ranges[0].descriptor-proto-reserved-range-end);
   for (got in got-ranges,
        want in want-ranges)
     assert-equal(want.descriptor-proto-reserved-range-start,
                  got.descriptor-proto-reserved-range-start);
-    assert-equal(want.descriptor-proto-reserved-range-start,
-                 got.descriptor-proto-reserved-range-start);
+    assert-equal(want.descriptor-proto-reserved-range-end,
+                 got.descriptor-proto-reserved-range-end);
   end;
 
   // Check the names
@@ -62,7 +63,10 @@ define test test-parse-reserved-field-spec/bad ()
                  #("message Bad { reserved 1-10; }", "comma"),
                  #("message Bad { reserved 8 9; }",  "comma"),
                  #("message Bad { reserved abc; }",  "want field name or number"),
-                 #("message Bad { reserved \"9a\"; }", "not a valid identifier")))
+                 #("message Bad { reserved \"9a\"; }", "not a valid identifier"),
+                 #("message Bad { reserved 10; optional string foo = 10; }", "marked as reserved"),
+                 #("message Bad { reserved 10 to 20; reserved 15 to 25; }", "overlap"),
+                 #("message Bad { reserved 10; reserved 10; }", "overlap")))
     let (message, text) = apply(values, item);
     let parser = parser-for(message);
     block ()

@@ -8,6 +8,10 @@ define module google-protobuf
   use print;                    // added by hand
   use streams;                  // added by hand
 
+  // added by hand
+  export
+    ranges-overlap?;
+
   export
     <file-descriptor-set>,
     file-descriptor-set-file,

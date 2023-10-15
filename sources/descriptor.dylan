@@ -74,3 +74,80 @@ define method print-object
            field-descriptor-proto-number(desc));
   end;
 end method;
+
+////
+//// Ranges - displayed in parser error messages
+////
+
+// Too bad these can't have a shared superclass. Could implement ``option
+// dylan_superclass = "<proto-range>"`` but not clear it's of general use and
+// it would mean maintaining a copy of descriptor.proto from which to generate
+// our code.
+
+define method print-object
+    (desc :: <descriptor-proto-reserved-range>, stream :: <stream>) => ()
+  print-range-object(desc, stream,
+                     desc.descriptor-proto-reserved-range-start,
+                     desc.descriptor-proto-reserved-range-end);
+end method;
+
+define method print-object
+    (desc :: <descriptor-proto-extension-range>, stream :: <stream>) => ()
+  print-range-object(desc, stream,
+                     desc.descriptor-proto-extension-range-start,
+                     desc.descriptor-proto-extension-range-end);
+end method;
+
+define function print-range-object (desc, stream, start, _end)
+  printing-object (desc, stream)
+    // Note that range end is exclusive.
+    if (start == _end - 1)
+      print(start, stream);
+    else
+      let fin = if (_end == $max-field-number - 1) "max" else _end end;
+      format(stream, "%d to %s", start, fin);
+    end;
+  end;
+end function;
+
+define generic ranges-overlap? (range1, range2) => (_ :: <boolean>);
+
+// reserved X reserved
+define method ranges-overlap?
+    (range1 :: <descriptor-proto-reserved-range>,
+     range2 :: <descriptor-proto-reserved-range>) => (_ :: <boolean>)
+  ~empty?(intersection(range(from: range1.descriptor-proto-reserved-range-start,
+                             to: range1.descriptor-proto-reserved-range-end - 1),
+                       range(from: range2.descriptor-proto-reserved-range-start,
+                             to: range2.descriptor-proto-reserved-range-end - 1)))
+end method;
+
+// extension X extension
+define method ranges-overlap?
+    (range1 :: <descriptor-proto-extension-range>,
+     range2 :: <descriptor-proto-extension-range>) => (_ :: <boolean>)
+  ~empty?(intersection(range(from: range1.descriptor-proto-extension-range-start,
+                             to: range1.descriptor-proto-extension-range-end - 1),
+                       range(from: range2.descriptor-proto-extension-range-start,
+                             to: range2.descriptor-proto-extension-range-end - 1)))
+end method;
+
+// reserved X extension
+define method ranges-overlap?
+    (range1 :: <descriptor-proto-reserved-range>,
+     range2 :: <descriptor-proto-extension-range>) => (_ :: <boolean>)
+  ~empty?(intersection(range(from: range1.descriptor-proto-reserved-range-start,
+                             to: range1.descriptor-proto-reserved-range-end - 1),
+                       range(from: range2.descriptor-proto-extension-range-start,
+                             to: range2.descriptor-proto-extension-range-end - 1)))
+end method;
+
+// extension X reserved
+define method ranges-overlap?
+    (range1 :: <descriptor-proto-extension-range>,
+     range2 :: <descriptor-proto-reserved-range>) => (_ :: <boolean>)
+  ~empty?(intersection(range(from: range1.descriptor-proto-extension-range-start,
+                             to: range1.descriptor-proto-extension-range-end - 1),
+                       range(from: range2.descriptor-proto-reserved-range-start,
+                             to: range2.descriptor-proto-reserved-range-end - 1)))
+end method;

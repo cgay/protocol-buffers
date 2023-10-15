@@ -293,7 +293,37 @@ define function parse-message
     enum.descriptor-parent := message;
   end;
   maybe-attach-comments-to(parser, message, message-token);
+  validate-message(parser, message);
   message
+end function;
+
+define function validate-message
+    (parser :: <parser>, message :: <descriptor-proto>) => ()
+  // Any reserved or extension ranges overlap each other?
+  let ranges = concat(message.descriptor-proto-reserved-range | #[],
+                      message.descriptor-proto-extension-range | #[]);
+  for (range1 in ranges)
+    for (range2 in ranges)
+      if (range1 ~== range2 & ranges-overlap?(range1, range2))
+        parse-error(sformat("range %= overlaps range %=", range1, range2));
+      end;
+    end;
+  end;
+  // Any reserved fields used?
+  for (field in descriptor-proto-field(message) | #())
+    let name = field.field-descriptor-proto-name;
+    let number = field.field-descriptor-proto-number;
+    if (member?(name, message.descriptor-proto-reserved-name | #(), test: string-equal?))
+      parse-error("invalid field name %=: this name is marked as reserved", name)
+    end;
+    for (range in message.descriptor-proto-reserved-range | #())
+      if (number >= range.descriptor-proto-reserved-range-start
+            & number < range.descriptor-proto-reserved-range-end)
+        parse-error("invalid field number %= for field %=: this number is marked as reserved",
+                    number, name);
+      end;
+    end;
+  end;
 end function;
 
 define function parse-enum
@@ -403,11 +433,6 @@ end function;
 //   reserved "foo", "bar", "baz";
 define function parse-reserved-field-spec
     (parser :: <parser>, message :: <descriptor-proto>) => ()
-  // TODO: check these after entire message parsed.
-  //  * message set wire format changes 'max' value
-  //  * field name may not be used by message field.
-  //  * field number may not be used by message field
-  //  * ranges may not overlap each other or extension ranges.
   iterate loop (token = next-token(parser))
     let value = token.token-value;
     select (token by instance?)
@@ -429,7 +454,8 @@ define function parse-reserved-field-spec
           parse-error("reserved fields must be integers in the range 1-%d: %s",
                       $max-field-number, sformat("%s", token));
         end;
-        let range = make(<descriptor-proto-reserved-range>, start: value, end: value);
+        // Note that range end is exclusive.
+        let range = make(<descriptor-proto-reserved-range>, start: value, end: value + 1);
         add-descriptor-proto-reserved-range(message, range);
         let punct = next-token(parser);
         select (punct.token-value by \=)
@@ -439,10 +465,11 @@ define function parse-reserved-field-spec
             loop(next-token(parser));
           #"to" =>
             let token2 = next-token(parser);
-            let value2 = token2.token-value;
-            if (value2 = #"max")
-              value2 := $max-field-number;
-            end;
+            let value2 = 1 + if (token2.token-value = #"max")
+                               $max-field-number
+                             else
+                               token2.token-value
+                             end;
             if (~instance?(value2, <int>) | value2 < value)
               parse-error("invalid reserved range end: %s", sformat("%s", token2));
             end;

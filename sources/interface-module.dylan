@@ -12,6 +12,8 @@ define module protocol-buffers
     enum-value,
     enum-value-name,
 
+    $max-field-number,
+
     // Types
     <int32>, <uint32>, <int64>, <uint64>;
 end module;

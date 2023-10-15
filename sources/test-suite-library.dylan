@@ -23,6 +23,7 @@ define module protocol-buffers-test-suite
     rename: { $maximum-integer => $maximum-big-int,
               $minimum-integer => $minimum-big-int,
               <integer> => <big-int> };
+  use print;
   use streams;
 
   // Modules from packages
