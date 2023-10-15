@@ -9,7 +9,8 @@ Files: library.dylan
        utilities.dylan
        types.dylan
        wire-format.dylan
-       idl.dylan
+       idl-lexer.dylan
+       idl-parser.dylan
        codegen.dylan
 Platforms: x86_64-darwin
            x86_64-freebsd

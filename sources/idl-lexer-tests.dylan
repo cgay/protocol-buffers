@@ -1,10 +1,6 @@
 Module: protocol-buffers-test-suite
-Synopsis: Tests for idl.dylan
+Synopsis: Tests for idl-lexer.dylan
 
-
-////
-//// lexer tests
-////
 
 define function read-all
     (input :: <string>, #key whitespace? = #t, comments? = #t) => (tokens :: <seq>)
@@ -182,32 +178,4 @@ define test test-attached-comments ()
     test-output("token comments size: %d %d\n", i, token.token-comments.size)
   end;
   assert-equal(1, tokens[1].token-comments.size);
-end test;
-
-
-////
-//// parser tests
-////
-
-
-define function parser-for (input :: <string>) => (p :: <parser>)
-  make(<parser>,
-       lexer: make(<lexer>,
-                   stream: make(<string-stream>,
-                                contents: input)))
-end function;
-
-define test test-parse-option-name ()
-  check-equal("simple name",
-              parse-option-name(parser-for("foo =")),
-              #("foo"));
-  check-equal("dotted name",
-              parse-option-name(parser-for("foo.bar =")),
-              #("foo", '.', "bar"));
-  check-equal("absolute name",
-              parse-option-name(parser-for(".foo.bar =")),
-              #('.', "foo", '.', "bar"));
-  check-equal("name with extension",
-              parse-option-name(parser-for(".foo.(.bar) =")),
-              #('.', "foo", '.', '(', '.', "bar", ')'));
 end test;
