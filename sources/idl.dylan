@@ -12,6 +12,9 @@ Synopsis: Ad-hoc lexer and parser for .proto Interface Definition Language
 // non-whitespace token for use by the code generator. The parser (next-token,
 // expect-token) never sees or cares about comments or whitespace.
 
+define constant $syntax-proto2 = "proto2";
+define constant $syntax-proto3 = "proto3";
+define constant $syntax-editions = "editions";
 
 define class <token> (<object>)
   constant slot token-text   :: <string>, required-init-keyword: text:;
@@ -39,8 +42,8 @@ define method make
   next-method(class,
               text: text,
               value: value,
-              line: lexer-line(*lexer*),
-              column: lexer-column(*lexer*))
+              line: iff(*lexer*, lexer-line(*lexer*), 0),
+              column: iff(*lexer*, lexer-column(*lexer*), 0))
 end method;
 
 define class <punctuation-token>   (<token>) end; // {, }, =, etc.
@@ -698,7 +701,7 @@ define function parse-file-stream
         #"syntax" =>
           maybe-attach-comments-to(parser, file, token);
           expect-token(parser, "=");
-          let token = expect-token(parser, #("proto2", "proto3", "editions"));
+          let token = expect-token(parser, list($syntax-proto2, $syntax-proto3, $syntax-editions));
           file-descriptor-proto-syntax(file)
             := token.token-text;
           expect-token(parser, ";");
@@ -779,27 +782,35 @@ define function parse-option-name
 end function;
 
 define function parse-message
-    (parser :: <parser>, file :: <file-descriptor-proto>, parent-names :: <list>, message-token :: <token>)
+    (parser :: <parser>, file :: <file-descriptor-proto>, parent-path :: <list>, message-token :: <token>)
  => (msg :: <descriptor-proto>)
   let name-token = next-token(parser);
   let name = name-token.token-text;
-  let name-path = pair(name, parent-names);
+  let name-path = pair(name, parent-path);
   expect-token(parser, "{");
-  let fields   = make(<stretchy-vector>);
-  let messages = make(<stretchy-vector>);
-  let enums    = make(<stretchy-vector>);
-  let options  = make(<stretchy-vector>);
-  let syntax   = file-descriptor-proto-syntax(file);
+  let syntax = file-descriptor-proto-syntax(file);
+  let message = make(<descriptor-proto>, name: name);
   block (done)
     while (#t)
-      let token = next-token(parser);
+      let token = next-token(parser, msg: "expected a message element or '}'");
+      let text = token.token-text;
       select (token.token-value)
         #"repeated", #"optional", #"required" =>
-          add!(fields, parse-message-field(parser, syntax, label: token));
+          if (syntax ~= $syntax-proto2)
+            parse-error("%= label not allowed in proto3 syntax file: %s",
+                        text, sformat("%s", token));
+          end;
+          add-descriptor-proto-field
+            (message, parse-message-field(parser, syntax, label: token));
         #"map", #"double", #"float", #"int32", #"int64", #"uint32", #"uint64",
         #"sint32", #"sint64", #"fixed32", #"fixed64", #"sfixed32", #"sfixed64",
         #"bool", #"string", #"bytes" =>
-          add!(fields, parse-message-field(parser, syntax, type: token));
+          if (syntax ~= $syntax-proto3)
+            parse-error("proto2 field missing 'optional', 'required', or 'repeated' label: %s",
+                        sformat("%s", token));
+          end;
+          add-descriptor-proto-field
+            (message, parse-message-field(parser, syntax, type: token));
         #"group" =>
           discard-statement(parser); // TODO: parse-group(parser);
         #"oneof" =>
@@ -811,9 +822,11 @@ define function parse-message
         #"reserved" =>
           discard-statement(parser); // TODO: parse-reserved-field-numbers(parser);
         #"message" =>
-          add!(messages, parse-message(parser, file, name-path, token));
+          add-descriptor-proto-nested-type
+            (message, parse-message(parser, file, name-path, token));
         #"enum" =>
-          add!(enums, parse-enum(parser, name-path, token));
+          add-descriptor-proto-enum-type
+            (message, parse-enum(parser, name-path, token));
         #"extend" =>
           discard-statement(parser); // TODO: parse-extend(parser, message-names);
         ';' =>                    // empty statement,
@@ -824,7 +837,12 @@ define function parse-message
           select (token by instance?)
             <identifier-token> =>
               // Looking at a proto3 message-, enum-, or group-typed field.
-              add!(fields, parse-message-field(parser, syntax, type: token));
+              if (syntax = $syntax-proto2)
+                parse-error("proto2 field missing 'optional', 'required', or 'repeated' label: %s",
+                            sformat("%s", token));
+              end;
+              add-descriptor-proto-field
+                (message, parse-message-field(parser, syntax, type: token));
             <comment-token> =>
               #f;
             otherwise =>
@@ -834,21 +852,13 @@ define function parse-message
       end select;
     end while;
   end block;
-  let message
-    = make(<descriptor-proto>,
-           name: name,
-           field: fields,
-           nested-type: messages,
-           enum-type: enums
-             // TODO: rest of the fields...
-             );
-  for (field in fields)
+  for (field in descriptor-proto-field(message) | #[])
     field.descriptor-parent := message;
   end;
-  for (child in messages)
+  for (child in descriptor-proto-nested-type(message) | #[])
     child.descriptor-parent := message;
   end;
-  for (enum in enums)
+  for (enum in descriptor-proto-enum-type(message) | #[])
     enum.descriptor-parent := message;
   end;
   maybe-attach-comments-to(parser, message, message-token);
@@ -862,8 +872,7 @@ define function parse-enum
   let name = name-token.token-text;
   let name-path = pair(name, parent-names);
   expect-token(parser, "{");
-  let fields  = make(<stretchy-vector>);
-  let options = make(<enum-options>);
+  let enum = make(<enum-descriptor-proto>, name: name);
   block (done)
     while (#t)
       let token = next-token(parser);
@@ -875,22 +884,15 @@ define function parse-enum
         '}' =>
           done();
         otherwise =>
-          add!(fields, parse-enum-field(parser, token));
+          add-enum-descriptor-proto-value(enum, parse-enum-field(parser, token));
       end;
     end;
   end;
-  fields.size > 0
+  enum.enum-descriptor-proto-value.size > 0
     | parse-error("enum %= must have at least one enum value",
                   join(reverse!(name-path), "."));
-  let enum
-    = make(<enum-descriptor-proto>,
-           name: name,
-           value: fields,
-           options: options,
-           reserved-name: #f,       // TODO
-           reserved-range: #f);     // TODO
-  for (field in fields)
-    field.descriptor-parent := enum;
+  for (value in enum.enum-descriptor-proto-value)
+    value.descriptor-parent := enum;
   end;
   maybe-attach-comments-to(parser, enum, enum-token);
   enum
@@ -1006,7 +1008,7 @@ define function parse-message-field
            options: options,
            // TODO: what about syntax = "2024"?
            proto3-optional:
-             label & label.token-text = "optional" & syntax = "proto3");
+             label & label.token-text = "optional" & syntax = $syntax-proto3);
   options & (options.descriptor-parent := field);
 
   // Check whether there's an end-of-line comment for this field and add it to
