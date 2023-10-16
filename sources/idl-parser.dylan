@@ -249,9 +249,9 @@ define function parse-message
         #"option" =>
           ;  // not yet: add!(options, parse-message-option(parser));
         #"extensions" =>
-          discard-statement(parser); // TODO: parse-message-extensions(parser);
+          parse-extensions-spec(parser, message);
         #"reserved" =>
-          parse-reserved-field-spec(parser, message);
+          parse-reserved-spec(parser, message);
         #"message" =>
           add-descriptor-proto-nested-type
             (message, parse-message(parser, file, name-path, token));
@@ -309,21 +309,30 @@ define function validate-message
       end;
     end;
   end;
-  // Any reserved fields used?
+  // Check for conflicting field names or numbers.
   for (field in descriptor-proto-field(message) | #())
     let name = field.field-descriptor-proto-name;
     let number = field.field-descriptor-proto-number;
     if (member?(name, message.descriptor-proto-reserved-name | #(), test: string-equal?))
       parse-error("invalid field name %=: this name is marked as reserved", name)
     end;
+    // Any reserved fields used?
     for (range in message.descriptor-proto-reserved-range | #())
       if (number >= range.descriptor-proto-reserved-range-start
             & number < range.descriptor-proto-reserved-range-end)
-        parse-error("invalid field number %= for field %=: this number is marked as reserved",
+        parse-error("invalid field number %= for field %=: marked as reserved",
                     number, name);
       end;
     end;
-  end;
+    // Any extensions field numbers used by normal fields?
+    for (range in message.descriptor-proto-extension-range | #())
+      if (number >= range.descriptor-proto-extension-range-start
+            & number < range.descriptor-proto-extension-range-end)
+        parse-error("invalid field number %= for field %=: part of an extension range",
+                    number, name);
+      end;
+    end;
+  end for;
 end function;
 
 define function parse-enum
@@ -431,7 +440,7 @@ end function;
 // message. Examples:
 //   reserved 10 to 20, 50 to 100, 20000 to max;
 //   reserved "foo", "bar", "baz";
-define function parse-reserved-field-spec
+define function parse-reserved-spec
     (parser :: <parser>, message :: <descriptor-proto>) => ()
   iterate loop (token = next-token(parser))
     let value = token.token-value;
@@ -451,7 +460,7 @@ define function parse-reserved-field-spec
         if (~instance?(value, <int>)
               | value < 1
               | value > $max-field-number)
-          parse-error("reserved fields must be integers in the range 1-%d: %s",
+          parse-error("reserved fields must be field numbers in the range 1-%d: %s",
                       $max-field-number, sformat("%s", token));
         end;
         // Note that range end is exclusive.
@@ -486,6 +495,64 @@ define function parse-reserved-field-spec
                     sformat("%s", token));
     end select
   end iterate
+end function;
+
+// Parse extensions and add them to extensions_range in message. Example:
+//   extensions 10 to 20, 50 to 100, 20000 to max;
+define function parse-extensions-spec
+    (parser :: <parser>, message :: <descriptor-proto>) => ()
+  iterate loop (token = next-token(parser))
+    let value = token.token-value;
+    if (value ~== ';')
+      if (~instance?(token, <number-token>))
+        parse-error("unexpected token %s, want field number",
+                    sformat("%s", token));
+      end;
+      if (~instance?(value, <int>)
+            | value < 1
+            | value > $max-field-number)
+        parse-error("extension range start must be in the range 1-%d: %s",
+                    $max-field-number, sformat("%s", token));
+      end;
+      // Note that range end is exclusive.
+      let range = make(<descriptor-proto-extension-range>, start: value, end: value + 1);
+      add-descriptor-proto-extension-range(message, range);
+      let punct = next-token(parser);
+      select (punct.token-text by \=)
+        ";" =>
+          #f;                 // done
+        "[" =>
+          parse-extension-range-options(parser, range);
+          expect-token(parser, ";"); // and done
+        "," =>
+          loop(next-token(parser));
+        "to" =>
+          let token2 = next-token(parser);
+          let value2 = token2.token-value;
+          if (value2 == #"max") value2 := $max-field-number; end;
+          (instance?(value2, <int>) & value <= value2)
+            | parse-error("invalid extension range end: %s", sformat("%s", token2));
+          descriptor-proto-extension-range-end(range) := value2 + 1;
+          if (',' == token-value(expect-token(parser, #[";", ","])))
+            loop(next-token(parser));
+          end;
+        otherwise =>
+          parse-error("unexpected token %s, want ';', '[', \"to\", or ','.",
+                      sformat("%s", punct));
+      end select;
+    end if;
+  end iterate
+end function;
+
+// Parse ExtensionRangeOptions into `range`.
+define function parse-extension-range-options
+    (parser :: <parser>, range :: <descriptor-proto-extension-range>) => ()
+  iterate loop (token = next-token(parser))
+    // TODO: for now just discard up to the "]"
+    if (token & token.token-value ~== ']')
+      loop(next-token(parser))
+    end;
+  end;
 end function;
 
 define function parse-message-field
