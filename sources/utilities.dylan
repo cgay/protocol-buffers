@@ -15,6 +15,12 @@ define function pb-error
              format-arguments: format-args));
 end function;
 
+// https://github.com/dylan-lang/opendylan/issues/1158
+define method condition-to-string
+    (err :: <protocol-buffer-error>) => (s :: <string>)
+  apply(sformat, err.condition-format-string, err.condition-format-arguments)
+end method;
+
 
 define variable *debug?* :: <bool> = #t;
 

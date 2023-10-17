@@ -68,8 +68,7 @@ define generic expect-token
 define method expect-token (parser :: <parser>, class :: <class>) => (token :: <token>)
   let token = next-token(parser);
   if (~instance?(token, class))
-    parse-error("expected a token of type %= but got %=",
-                class, sformat("%=", token));
+    parse-error("expected a token of type %= but got %=", class, token);
   end;
   token
 end method;
@@ -85,7 +84,7 @@ define method expect-token (parser :: <parser>, strings :: <seq>) => (token :: <
                 join(strings, ", ",
                      key: method (s) sformat("%=", s) end,
                      conjunction: " or "),
-                sformat("%=", token));
+                token);
   end;
   token
 end method;
@@ -155,9 +154,7 @@ define function parse-file-stream
           // Allow whitespace and comments to be ignored.
           if (~instance?(token, <comment-token>)
                 & ~instance?(token, <whitespace-token>))
-            // Call sformat here because the default handler prints error messages with
-            // the common-dylan version format, which doesn't call print-object.
-            parse-error("unexpected token: %s", sformat("%=", token));
+            parse-error("unexpected token: %s", token);
           end;
       end select;
       loop(next-token(parser));
@@ -213,7 +210,8 @@ define function parse-option-name
 end function;
 
 define function parse-message
-    (parser :: <parser>, file :: <file-descriptor-proto>, parent-path :: <list>, message-token :: <token>)
+    (parser :: <parser>, file :: <file-descriptor-proto>, parent-path :: <list>,
+     message-token :: <token>)
  => (msg :: <descriptor-proto>)
   let name-token = next-token(parser);
   let name = name-token.token-text;
@@ -228,8 +226,7 @@ define function parse-message
       select (token.token-value)
         #"repeated", #"optional", #"required" =>
           if (syntax ~= $syntax-proto2)
-            parse-error("%= label not allowed in proto3 syntax file: %s",
-                        text, sformat("%s", token));
+            parse-error("%= label not allowed in proto3 syntax file: %s", text, token);
           end;
           add-descriptor-proto-field
             (message, parse-message-field(parser, syntax, label: token));
@@ -238,7 +235,7 @@ define function parse-message
         #"bool", #"string", #"bytes" =>
           if (syntax ~= $syntax-proto3)
             parse-error("proto2 field missing 'optional', 'required', or 'repeated' label: %s",
-                        sformat("%s", token));
+                        token);
           end;
           add-descriptor-proto-field
             (message, parse-message-field(parser, syntax, type: token));
@@ -270,15 +267,14 @@ define function parse-message
               // Looking at a proto3 message-, enum-, or group-typed field.
               if (syntax = $syntax-proto2)
                 parse-error("proto2 field missing 'optional', 'required', or 'repeated' label: %s",
-                            sformat("%s", token));
+                            token);
               end;
               add-descriptor-proto-field
                 (message, parse-message-field(parser, syntax, type: token));
             <comment-token> =>
               #f;
             otherwise =>
-              parse-error("unexpected message element starting with %s",
-                          sformat("%=", token));
+              parse-error("unexpected message element starting with %s", token);
           end;
       end select;
     end while;
@@ -372,7 +368,7 @@ define function parse-enum-field
     (parser :: <parser>, name :: <token>)
  => (field :: <enum-value-descriptor-proto>)
   if (~instance?(name, <identifier-token>))
-    parse-error("unexpected token type %s", sformat("%=", name));
+    parse-error("unexpected token type %s", name);
   end;
   // TODO: group is explicitly called out as reserved, but there must be others?
   if (name.token-text = "group")
@@ -449,8 +445,7 @@ define function parse-reserved-spec
         if (value.size == 0
               | ~alphabetic?(value[0])
               | ~alphanumeric?(value))
-          parse-error("reserved field name not a valid identifier: %s",
-                      sformat("%s", value));
+          parse-error("reserved field name not a valid identifier: %s", value);
         end;
         add-descriptor-proto-reserved-name(message, value);
         if (',' == token-value(expect-token(parser, #[";", ","])))
@@ -461,7 +456,7 @@ define function parse-reserved-spec
               | value < 1
               | value > $max-field-number)
           parse-error("reserved fields must be field numbers in the range 1-%d: %s",
-                      $max-field-number, sformat("%s", token));
+                      $max-field-number, token);
         end;
         // Note that range end is exclusive.
         let range = make(<descriptor-proto-reserved-range>, start: value, end: value + 1);
@@ -480,19 +475,17 @@ define function parse-reserved-spec
                                token2.token-value
                              end;
             if (~instance?(value2, <int>) | value2 < value)
-              parse-error("invalid reserved range end: %s", sformat("%s", token2));
+              parse-error("invalid reserved range end: %s", token2);
             end;
             descriptor-proto-reserved-range-end(range) := value2;
             if (',' == token-value(expect-token(parser, #[";", ","])))
               loop(next-token(parser));
             end;
           otherwise =>
-            parse-error("unexpected token %s, want semicolon, comma or 'to'",
-                        sformat("%s", punct));
+            parse-error("unexpected token %s, want semicolon, comma or 'to'", punct);
         end;
       otherwise =>
-        parse-error("unexpected token %s, want field name or number",
-                    sformat("%s", token));
+        parse-error("unexpected token %s, want field name or number", token);
     end select
   end iterate
 end function;
@@ -505,14 +498,13 @@ define function parse-extensions-spec
     let value = token.token-value;
     if (value ~== ';')
       if (~instance?(token, <number-token>))
-        parse-error("unexpected token %s, want field number",
-                    sformat("%s", token));
+        parse-error("unexpected token %s, want field number", token);
       end;
       if (~instance?(value, <int>)
             | value < 1
             | value > $max-field-number)
         parse-error("extension range start must be in the range 1-%d: %s",
-                    $max-field-number, sformat("%s", token));
+                    $max-field-number, token);
       end;
       // Note that range end is exclusive.
       let range = make(<descriptor-proto-extension-range>, start: value, end: value + 1);
@@ -531,14 +523,13 @@ define function parse-extensions-spec
           let value2 = token2.token-value;
           if (value2 == #"max") value2 := $max-field-number; end;
           (instance?(value2, <int>) & value <= value2)
-            | parse-error("invalid extension range end: %s", sformat("%s", token2));
+            | parse-error("invalid extension range end: %s", token2);
           descriptor-proto-extension-range-end(range) := value2 + 1;
           if (',' == token-value(expect-token(parser, #[";", ","])))
             loop(next-token(parser));
           end;
         otherwise =>
-          parse-error("unexpected token %s, want ';', '[', \"to\", or ','.",
-                      sformat("%s", punct));
+          parse-error("unexpected token %s, want ';', '[', \"to\", or ','.", punct);
       end select;
     end if;
   end iterate
@@ -565,7 +556,7 @@ define function parse-message-field
   // descriptor.proto doesn't use them.
   if (~instance?(type, <reserved-word-token>)
         & ~instance?(type, <identifier-token>))
-    parse-error("unexpected token type %s", sformat("%=", type));
+    parse-error("unexpected token type %s", type);
   end;
   let name = next-token(parser);
   // TODO: group is explicitly called out as reserved, but there must be others?
@@ -636,7 +627,7 @@ define function parse-field-options
         "deprecated" =>
           field-options-deprecated(options) := token-value(value);
         "default" =>
-          default := token-value(value);
+          default := token-text(value);
         // TODO: handle more well-known options.
         otherwise =>
           // TODO: store in uninterpreted-option slot.
@@ -648,5 +639,5 @@ define function parse-field-options
       end;
     end if;
   end iterate;
-  values(sformat("%=", default), options)
+  values(default, options)
 end function;
