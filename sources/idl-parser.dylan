@@ -36,30 +36,43 @@ define class <parser> (<object>)
   slot previous-token :: false-or(<token>) = #f;
 end class;
 
-define function next-token
-    (parser :: <parser>, #key msg) => (token :: false-or(<token>))
-  let peeked = parser.peeked-token;
-  if (peeked)
-    parser.peeked-token := #f;
-    peeked
-  else
-    let token = read-token(parser.%lexer);
-    while (instance?(token, <comment-token>))
-      token := read-token(parser.%lexer);
-    end;
-    if (token
-          & ~instance?(token, <whitespace-token>)
-          & ~instance?(token, <comment-token>))
-      parser.previous-token := token;
-    end;
-    token | (msg & parse-error(msg))
-  end
-end function;
-
 define function peek-token
     (parser :: <parser>) => (token :: false-or(<token>))
   parser.peeked-token
-    | (parser.peeked-token := read-token(parser.%lexer))
+    | begin
+        let token = read-token(parser.%lexer);
+        while (instance?(token, <comment-token>))
+          token := read-token(parser.%lexer);
+        end;
+        parser.peeked-token := token // #f when at EOF
+      end
+end function;
+
+// TODO: rename to consume-token (or just peek and consume)
+define function next-token
+    (parser :: <parser>) => (token :: <token>)
+  let token = parser.peeked-token
+                | peek-token(parser)
+                | parse-error("unexpected end of input encountered");
+  parser.peeked-token := #f;
+  parser.previous-token := token
+end function;
+
+define function unconsume-token
+    (parser :: <parser>, token) => ()
+  if (parser.peeked-token)
+    parse-error("can't unconsume token %=, a token has already been peeked", token);
+  elseif (~parser.previous-token)
+    parse-error("can't unconsume token %=, there is no previous token", token);
+  elseif (select (token by instance?)
+            <token> => token ~== parser.previous-token;
+            <string> => token ~= parser.previous-token.token-text;
+          end)
+    parse-error("can't unconsume token %=, not equal to previous token", token);
+  else
+    parser.peeked-token := token;
+    parser.previous-token := #f; // could do better here
+  end;
 end function;
 
 define generic expect-token
@@ -162,53 +175,79 @@ define function parse-file-stream
   end iterate;
 end function;
 
+// The "option" token has just been consumed at file level, so consume up to
+// the next semicolon and store the option value in the appropriate field in
+// `options`.  "option maybe.fully.qualified.name = value ;"
 define function parse-file-option
     (parser :: <parser>, options :: <file-options>) => ()
-  let name :: <seq> = parse-option-name(parser); // consumes trailing '='
-  let value = token-value(next-token(parser, msg: "while parsing option value"));
-  expect-token(parser, ";");
-
-  // Most FileOptions are useless to us so don't bother putting them in the
-  // language-specific slots, just put them all into uninterpreted_option.
-  let unopts = options.file-options-uninterpreted-option | make(<stretchy-vector>);
-  options.file-options-uninterpreted-option := unopts;
-
-  // UninterpretedOption is over-complex for a dynamically typed language so
-  // (at least for now) I'm taking advantage of the fact that repeated fields
-  // are represented with generically typed <stretchy-vector> and stuffing all
-  // options into it as pairs.
-  add!(unopts, pair(name, value));
-  // TODO: faithfully use the descriptor.proto AST:
-  // add-file-options-uninterpreted-option(options, option);
+  let name-token = peek-token(parser) | next-token(parser);
+  let name = name-token.token-text;
+  // TODO: should be able to iterate over the fields of <file-options> rather than
+  // enumerating them here. Code generator needs to emit introspection APIs.
+  let setter
+    = select (name by \=)
+        "java_package"                  => file-options-java-package-setter;
+        "java_outer_classname"          => file-options-java-outer-classname-setter;
+        "java_multiple_files"           => file-options-java-multiple-files-setter;
+        "java_generate_equals_and_hash" => file-options-java-generate-equals-and-hash-setter;
+        "java_string_check_utf8"        => file-options-java-string-check-utf8-setter;
+        "optimize_for"                  => file-options-optimize-for-setter;
+        "go_package"                    => file-options-go-package-setter;
+        "cc_generic_services"           => file-options-cc-generic-services-setter;
+        "java_generic_services"         => file-options-java-generic-services-setter;
+        "py_generic_services"           => file-options-py-generic-services-setter;
+        "php_generic_services"          => file-options-php-generic-services-setter;
+        "deprecated"                    => file-options-deprecated-setter;
+        "cc_enable_arenas"              => file-options-cc-enable-arenas-setter;
+        "objc_class_prefix"             => file-options-objc-class-prefix-setter;
+        "csharp_namespace"              => file-options-csharp-namespace-setter;
+        "swift_prefix"                  => file-options-swift-prefix-setter;
+        "php_class_prefix"              => file-options-php-class-prefix-setter;
+        "php_namespace"                 => file-options-php-namespace-setter;
+        "php_metadata_namespace"        => file-options-php-metadata-namespace-setter;
+        "ruby_package"                  => file-options-ruby-package-setter;
+        otherwise                       => #f;
+      end;
+  if (setter)
+    next-token(parser);         // consume peeked option name token
+    expect-token(parser, "=");
+    // optimize_for is the only non-primitive type so handle it specially.  The rest
+    // we'll just treat as <object> for now, and depend on the setters to blow up if the
+    // value has the wrong type.
+    let type = iff(name = "optimize_for",
+                   <file-options-optimize-mode>,
+                   <object>);
+    setter(parse-option-value(parser, type), options);
+  else
+    add-file-options-uninterpreted-option(options, parse-uninterpreted-option(parser));
+  end;
 end function;
 
-// OptionName = ( SimpleName | ExtensionName ) [ dot OptionName ] .
-// Parse an option name of the form "foo", "foo.bar", "foo.(.bar.baz).quux",
-// etc. into a sequence of name parts where '.', '(', and ')' represent
-// themselves.
-define function parse-option-name
-    (parser :: <parser>) => (option :: <seq>)
-  iterate loop (parts = #(), in-extension? = #f)
-    let token = next-token(parser, msg: "while reading option name");
-    select (token.token-value)
-      '=' => reverse!(parts);   // done
-      '(' => iff(in-extension?,
-                 parse-error("nested '(' in option name not allowed"),
-                 loop(pair('(', parts), #t));
-      ')' => iff(in-extension?,
-                 loop(pair(')', parts), #f),
-                 parse-error("unexpected ')' in option name"));
-      '.' => loop(pair('.', parts), in-extension?);
-      otherwise =>
-        if (~instance?(token, <identifier-token>))
-          parse-error("only identifier token, '(', ')', or '.' in option name, got %=",
-                      token.token-text);
-        end;
-        loop(pair(token.token-text, parts), in-extension?)
-    end
-  end iterate
+// Parse an option value and verify that it matches the expected type. If the given type
+// is a protobuf enum type, then lookup the appropriate value based on the enum value
+// name.
+// TODO: maps, message literals....
+define function parse-option-value
+    (parser :: <parser>, type :: <type>) => (value, value-text :: <string>)
+  let token = next-token(parser);
+  let text = token.token-text;
+  values(select (type by subtype?)
+           <protocol-buffer-enum> =>
+             instance?(token, <identifier-token>)
+               | parse-error("expected an identifier: %=", token);
+             enum-name-to-value(type, text);
+           <protocol-buffer-message> =>
+             parse-error("message constant values are not yet implemented (%=)", token);
+           otherwise =>
+             let value = token.token-value;
+             instance?(value, type)
+               | parse-error("%= is not of the expected type, %=", token, type);
+             value;
+         end,
+         text)
 end function;
 
+// The "message" token has just been consumed, at file level or nested in another message.
 define function parse-message
     (parser :: <parser>, file :: <file-descriptor-proto>, parent-path :: <list>,
      message-token :: <token>)
@@ -221,7 +260,7 @@ define function parse-message
   let message = make(<descriptor-proto>, name: name);
   block (done)
     while (#t)
-      let token = next-token(parser, msg: "expected a message element or '}'");
+      let token = next-token(parser);
       let text = token.token-text;
       select (token.token-value)
         #"repeated", #"optional", #"required" =>
@@ -233,7 +272,7 @@ define function parse-message
         #"map", #"double", #"float", #"int32", #"int64", #"uint32", #"uint64",
         #"sint32", #"sint64", #"fixed32", #"fixed64", #"sfixed32", #"sfixed64",
         #"bool", #"string", #"bytes" =>
-          if (syntax ~= $syntax-proto3)
+          if (syntax = $syntax-proto2)
             parse-error("proto2 field missing 'optional', 'required', or 'repeated' label: %s",
                         token);
           end;
@@ -293,6 +332,7 @@ define function parse-message
   message
 end function;
 
+// Do consistency checks that require the entire message to have been parsed.
 define function validate-message
     (parser :: <parser>, message :: <descriptor-proto>) => ()
   // Any reserved or extension ranges overlap each other?
@@ -331,6 +371,7 @@ define function validate-message
   end for;
 end function;
 
+// The "enum" token has just been consumed, at file level or nested in a message.
 define function parse-enum
     (parser :: <parser>, parent-names :: <list>, enum-token :: <token>)
  => (enum :: <enum-descriptor-proto>)
@@ -364,6 +405,7 @@ define function parse-enum
   enum
 end function;
 
+// Parse "NAME = VALUE [ options ];" in an enum.
 define function parse-enum-field
     (parser :: <parser>, name :: <token>)
  => (field :: <enum-value-descriptor-proto>)
@@ -546,26 +588,25 @@ define function parse-extension-range-options
   end;
 end function;
 
+// Parse a message field. For proto2 syntax, `label` is supplied and we must parse the
+// field type. For proto3 there is no label and `type` is supplied by the caller.
+// https://protobuf.com/docs/language-spec#fields
 define function parse-message-field
     (parser :: <parser>, syntax :: <string>,
-     #key label :: false-or(<token>), // if provided, this is a proto2 field
-          type :: false-or(<token>))  // if provided, this is a proto3 field
+     #key label :: false-or(<token>), type :: false-or(<token>))
  => (field :: <field-descriptor-proto>)
   let type = type | next-token(parser);
   // TODO: field types that are fully qualified names. skipping for now since
   // descriptor.proto doesn't use them.
-  if (~instance?(type, <reserved-word-token>)
-        & ~instance?(type, <identifier-token>))
-    parse-error("unexpected token type %s", type);
-  end;
+  instance?(type, <identifier-token>)
+    | parse-error("expected a message field type: %=", type);
   let name = next-token(parser);
   // TODO: group is explicitly called out as reserved, but there must be others?
-  if (name.token-text = "group")
-    parse-error("'group' may not be used as a field name");
-  end;
+  name.token-text = "group"
+    & parse-error("'group' may not be used as a field name: %=", name);
   expect-token(parser, "=");
   let number = expect-token(parser, <number-token>);
-  let (default, options)
+  let (options, default, json-name)
     = if ('[' == token-value(expect-token(parser, #(";", "["))))
         parse-field-options(parser)
         // TODO: does this need expect-token(parser, ";")? write a test.
@@ -579,7 +620,8 @@ define function parse-message-field
                             #"required" => $field-descriptor-proto-label-label-required;
                             #"optional" => $field-descriptor-proto-label-label-optional;
                           end,
-           default-value: default,  // a string
+           default-value: default,
+           json-name: json-name,
            // type: We just use type-name and don't bother with the type field.
            type-name: type.token-text,
            options: options,
@@ -607,50 +649,60 @@ define function parse-message-field
   field
 end function parse-message-field;
 
-// The parser has just consumed the opening "[" token.
+// The opening "[" token has just been consumed. Consume through the matching ']' token.
+// https://protobuf.com/docs/language-spec#fields
 define function parse-field-options
-    (parser :: <parser>) => (default :: false-or(<string>), options :: <field-options>)
+    (parser :: <parser>)
+ => (options :: <field-options>, default :: false-or(<string>), json-name :: false-or(<string>))
+  // Special handling for the two "pseudo options", default and json_name.
   let default = #f;
+  let json-name = #f;
   let options = make(<field-options>);
-  iterate loop (name-token = next-token(parser))
-    expect-token(parser, "=");
-    let token = next-token(parser);
+  iterate loop ()
+    let name-token = next-token(parser);
+    let equals = expect-token(parser, "=");
     select (name-token.token-text by \=)
       "ctype" =>
-        field-options-ctype(options)
-          := enum-name-to-value(<field-options-ctype>, token.token-text);
+        field-options-ctype(options) := parse-option-value(parser, <field-options-ctype>);
       "default" =>
-        default := token.token-text;
+        let (_, value-text) = parse-option-value(parser, <object>);
+        default := value-text;
       "deprecated" =>
-        field-options-deprecated(options) := token.token-value;
+        field-options-deprecated(options) := parse-option-value(parser, <bool>);
+      "json_name" =>
+        json-name := parse-option-value(parser, <string>);
       "jstype" =>
-        field-options-jstype(options)
-          := enum-name-to-value(<field-options-js-type>, token.token-text);
+        field-options-jstype(options) := parse-option-value(parser, <field-options-js-type>);
       "lazy" =>
-        field-options-lazy(options) := token.token-value;
+        field-options-lazy(options) := parse-option-value(parser, <bool>);
       "packed" =>
-        field-options-packed(options) := token.token-value;
+        field-options-packed(options) := parse-option-value(parser, <bool>);
       "unverified_lazy" =>
-        field-options-unverified-lazy(options) := token.token-value;
+        field-options-unverified-lazy(options) := parse-option-value(parser, <bool>);
       "weak" =>
-        field-options-weak(options) := token.token-value;
+        field-options-weak(options) := parse-option-value(parser, <bool>);
       otherwise =>
-        let uoption = parse-uninterpreted-option(parser, name-token, token);
+        unconsume-token(parser, equals);
+        let uoption = parse-uninterpreted-option(parser, token: name-token);
         add-field-options-uninterpreted-option(options, uoption);
     end select;
     if (',' == token-value(expect-token(parser, #(",", "]"))))
-      loop(next-token(parser))
+      loop()
     end;
   end iterate;
-  values(default, options)
+  values(options, default, json-name)
 end function;
 
+// Parse an uninterpreted (i.e., unrecognized by the protobuf spec) option from compact
+// field options.
 define function parse-uninterpreted-option
-    (parser :: <parser>, name-token :: <token>, value-token :: <token>)
+    (parser :: <parser>, #key token :: <token> = next-token(parser))
  => (option :: <uninterpreted-option>)
-  let name = parse-uninterpreted-option-name(name-token.token-text);
+  let name = parse-uninterpreted-option-name(parser, token: token);
+  expect-token(parser, "=");
   let option = make(<uninterpreted-option>, name: name);
-  let value = value-token.token-value;
+  let value-token = peek-token(parser);
+  let value = parse-option-value(parser, <object>);
   select (value-token by instance?)
     <identifier-token> =>
       uninterpreted-option-identifier-value(option) := value;
@@ -665,45 +717,65 @@ define function parse-uninterpreted-option
     <string-token> =>
       uninterpreted-option-string-value(option) := as(<byte-vector>, value);
     otherwise =>
-      // What do they mean by aggregate value? Map literal? For now just store the
-      // text. It's typed as string in any case.
+      // TODO: What do they mean by aggregate value? Map literal? Message literal?  For
+      // now just store the text. Might need to have parse-option-value (above) return
+      // the full text of the multi-token literal to store here?
+      debug("storing potentially incorrect uninterpreted-option-aggregate-value: %=",
+            value-token.token-text);
       uninterpreted-option-aggregate-value(option) := value-token.token-text;
   end select;
   option
 end function;
 
-// Parse an option name like "foo.(bar.baz).moo" into NamePart objects.
-// E.g.,{ ["foo", false], ["bar.baz", true], ["moo", false] } represents
-// "foo.(bar.baz).moo".
+// Parse an option name into a sequence of NamePart objects.  Parsing ends
+// after "=" consumed. Some examples of valid names:
+//
+//   - foo
+//   - foo.(.a.fully.qualified.type).bar
+//   - .foo.bar
+//
+// BNF: OptionName = ( SimpleName | ExtensionName ) [ dot OptionName ] .
 define function parse-uninterpreted-option-name
-    (name :: <string>) => (name-parts :: <stretchy-vector>)
-  local method add-part (i, j, extension?, parts)
-          iff(i < j, // can be equal e.g. for ")." sequence
-              add!(parts,
-                   make(<uninterpreted-option-name-part>,
-                        name-part: copy-sequence(name, start: i, end: j),
-                        is-extension: extension?)),
-              parts)
+    (parser :: <parser>, #key token :: <token> = next-token(parser))
+ => (name-parts :: <stretchy-vector>)
+  let parts = make(<stretchy-vector>);
+  local method add-part (text, ext?)
+          add!(parts, make(<uninterpreted-option-name-part>,
+                           name-part: text,
+                           is-extension: ext?));
         end;
-  iterate loop (i = 0, j = 0, parts = make(<stretchy-vector>), extension? = #f)
-    if (j >= name.size)
-      add-part(i, j, extension?, parts)
-    else
-      select (name[j])
-        '(' =>
-          loop(i + 1, j + 1, parts, #t);
-        ')' =>
-          loop(j + 1, j + 1, add-part(i, j, #t, parts), #f);
-        '.' =>
-          if (extension?)
-            // extension parts retain their internal dots, just bump j.
-            loop(i, j + 1, parts, #t)
-          else
-            loop(j + 1, j + 1, add-part(i, j, #f, parts), extension?)
-          end;
-        otherwise =>
-          loop(i, j + 1, parts, extension?);
-      end
-    end
-  end
+  iterate loop (token = token, prev = #f, ext-parts = #f)
+    select (token.token-value)
+      '=' =>                    // done!
+        unconsume-token(parser, token);
+        iff(empty?(parts) | ext-parts,
+            parse-error("incomplete option name (unmatched open paren?): %=", token),
+            parts);
+      '(' =>
+        iff(ext-parts,
+            parse-error("option name may not have nested parentheses: %=", token),
+            loop(next-token(parser), '(', #()));
+      '.' =>
+        iff(prev == '.',
+            parse-error("option name may not have two consecutive dots: %=", token),
+            loop(next-token(parser), '.', ext-parts & pair(".", ext-parts)));
+      ')' =>
+        if (size(ext-parts | #()) > 0)
+          add-part(join(reverse!(ext-parts), ""), #t);
+          loop(next-token(parser), ')', #f)
+        else
+          parse-error("extension part of uninterpreted option name is empty: %=", token);
+        end;
+      otherwise =>
+        instance?(token, <identifier-token>)
+          | parse-error("unexpected token while parsing option name: %=", token);
+        let name = token.token-text;
+        if (ext-parts)
+          loop(next-token(parser), #"id", pair(name, ext-parts))
+        else
+          add-part(name, #f);
+          loop(next-token(parser), #"id", #f)
+        end
+    end select
+  end iterate
 end function;

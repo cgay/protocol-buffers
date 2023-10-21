@@ -94,6 +94,6 @@ define module protocol-buffers-impl
     debug,
     dylan-class-name,
     dylan-name,
-    parse-option-name,
+    parse-uninterpreted-option-name,
     token-comments;
 end module;

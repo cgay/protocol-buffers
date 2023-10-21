@@ -92,7 +92,7 @@ define function parse-file
   with-open-file (in-stream = file, direction: #"input")
     let descriptor
       = make(<file-descriptor-proto>, name: as(<string>, file));
-    let lexer = make(<lexer>, stream: in-stream);
+    let lexer = make(<lexer>, stream: in-stream, whitespace?: #f);
     let parser = make(<parser>, lexer: lexer);
     parse-file-stream(parser, descriptor);
     values(descriptor, parser.attached-comments)

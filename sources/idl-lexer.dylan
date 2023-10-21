@@ -78,11 +78,11 @@ define class <lexer> (<object>)
   constant slot lexer-file :: <string> = "<stream>",
     init-keyword: file:;
 
-  // Whether next-token should return whitespace tokens or drop them.
+  // Whether read-token should return whitespace tokens or drop them.
   constant slot lexer-whitespace? :: <bool> = #f,
     init-keyword: whitespace?:;
 
-  // Whether next-token should return comment tokens or drop them.
+  // Whether read-token should return comment tokens or drop them.
   constant slot lexer-comments? :: <bool> = #t,
     init-keyword: comments?:;
   // Sequence of consecutively returned comment tokens to be attached to the
@@ -446,7 +446,7 @@ define function read-string-literal
   iterate loop (token-chars = #(), string-chars = #(), escaped? = #f)
     let char = peek-char(lex);
     if (~char)
-      lex-error(lex, "end of stream encountered while parsing string constant");
+      lex-error(lex, "end of stream encountered while parsing string literal");
     end;
     consume-char(lex);
     if (escaped?)
@@ -478,7 +478,7 @@ define function read-string-literal
            text: as(<string>, reverse!(token-chars)),
            value: as(<string>, reverse!(string-chars)))
     elseif (char == '\0' | char == '\n')
-      lex-error(lex, "invalid character %= in string constant", char)
+      lex-error(lex, "invalid character %= in string literal", char)
     else
       loop(pair(char, token-chars), pair(char, string-chars), #f)
     end

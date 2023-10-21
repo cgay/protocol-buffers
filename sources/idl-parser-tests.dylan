@@ -9,21 +9,6 @@ define function parser-for (input :: <string>) => (p :: <parser>)
                                 contents: input)))
 end function;
 
-define test test-parse-option-name ()
-  check-equal("simple name",
-              parse-option-name(parser-for("foo =")),
-              #("foo"));
-  check-equal("dotted name",
-              parse-option-name(parser-for("foo.bar =")),
-              #("foo", '.', "bar"));
-  check-equal("absolute name",
-              parse-option-name(parser-for(".foo.bar =")),
-              #('.', "foo", '.', "bar"));
-  check-equal("name with extension",
-              parse-option-name(parser-for(".foo.(.bar) =")),
-              #('.', "foo", '.', '(', '.', "bar", ')'));
-end test;
-
 define test test-parse-reserved-spec/good ()
   let good = """
     message Good {
@@ -130,13 +115,14 @@ define test test-parse-extensions-spec/bad ()
   end;
 end test;
 
+// TODO: test an absolute qualified name. Return absolute? as a second value?
 define test test-parse-uninterpreted-option-name ()
-  let parts = parse-uninterpreted-option-name("foo");
+  let parts = parse-uninterpreted-option-name(parser-for("abc ="));
   expect-equal(1, parts.size);
-  assert-equal("foo", uninterpreted-option-name-part-name-part(parts[0]));
+  assert-equal("abc", uninterpreted-option-name-part-name-part(parts[0]));
   assert-equal(#f, uninterpreted-option-name-part-is-extension(parts[0]));
 
-  let parts = parse-uninterpreted-option-name("foo.(bar.baz).moo");
+  let parts = parse-uninterpreted-option-name(parser-for("foo.(bar.baz).moo ="));
   assert-equal(3, parts.size);
 
   assert-equal("foo", uninterpreted-option-name-part-name-part(parts[0]));
@@ -150,10 +136,13 @@ define test test-parse-uninterpreted-option-name ()
 end test;
 
 define test test-parse-field-options ()
+  // The opening "[" has already been consumed.
   let parser = parser-for("""default = true, weak = true, unknown = 123 ]""");
-  let (default, options) = parse-field-options(parser);
+  let (options, default, json-name) = parse-field-options(parser);
   assert-equal("true", default); // The token text is stored for default.
   assert-equal(#t, options.field-options-weak);
   assert-equal(1, options.field-options-uninterpreted-option.size);
-  assert-equal(123, options.field-options-uninterpreted-option[0].uninterpreted-option-positive-int-value);
+  assert-equal(123,
+               uninterpreted-option-positive-int-value
+                 (field-options-uninterpreted-option(options)[0]));
 end test;
