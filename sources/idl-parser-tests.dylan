@@ -129,3 +129,31 @@ define test test-parse-extensions-spec/bad ()
     end;
   end;
 end test;
+
+define test test-parse-uninterpreted-option-name ()
+  let parts = parse-uninterpreted-option-name("foo");
+  expect-equal(1, parts.size);
+  assert-equal("foo", uninterpreted-option-name-part-name-part(parts[0]));
+  assert-equal(#f, uninterpreted-option-name-part-is-extension(parts[0]));
+
+  let parts = parse-uninterpreted-option-name("foo.(bar.baz).moo");
+  assert-equal(3, parts.size);
+
+  assert-equal("foo", uninterpreted-option-name-part-name-part(parts[0]));
+  assert-equal(#f, uninterpreted-option-name-part-is-extension(parts[0]));
+
+  assert-equal("bar.baz", uninterpreted-option-name-part-name-part(parts[1]));
+  assert-equal(#t, uninterpreted-option-name-part-is-extension(parts[1]));
+
+  assert-equal("moo", uninterpreted-option-name-part-name-part(parts[2]));
+  assert-equal(#f, uninterpreted-option-name-part-is-extension(parts[2]));
+end test;
+
+define test test-parse-field-options ()
+  let parser = parser-for("""default = true, weak = true, unknown = 123 ]""");
+  let (default, options) = parse-field-options(parser);
+  assert-equal("true", default); // The token text is stored for default.
+  assert-equal(#t, options.field-options-weak);
+  assert-equal(1, options.field-options-uninterpreted-option.size);
+  assert-equal(123, options.field-options-uninterpreted-option[0].uninterpreted-option-positive-int-value);
+end test;

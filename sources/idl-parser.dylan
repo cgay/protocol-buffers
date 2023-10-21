@@ -565,14 +565,11 @@ define function parse-message-field
   end;
   expect-token(parser, "=");
   let number = expect-token(parser, <number-token>);
-  let default = #f;
-  let options = #f;
-  if ('[' == token-value(expect-token(parser, #(";", "["))))
-    let (d, o) = parse-field-options(parser);
-    default := d;
-    options := o;
-    // TODO: does this need expect-token(parser, ";")? write a test.
-  end;
+  let (default, options)
+    = if ('[' == token-value(expect-token(parser, #(";", "["))))
+        parse-field-options(parser)
+        // TODO: does this need expect-token(parser, ";")? write a test.
+      end;
   let field
     = make(<field-descriptor-proto>,
            name: name.token-text,
@@ -586,7 +583,7 @@ define function parse-message-field
            // type: We just use type-name and don't bother with the type field.
            type-name: type.token-text,
            options: options,
-           // TODO: what about syntax = "2024"?
+           // TODO: what about syntax = "editions"?
            proto3-optional:
              label & label.token-text = "optional" & syntax = $syntax-proto3);
   options & (options.descriptor-parent := field);
@@ -610,34 +607,103 @@ define function parse-message-field
   field
 end function parse-message-field;
 
-// TODO: For now this is just enough to handle the set of options used in
-// descriptor.proto: default, deprecated, and packed.
+// The parser has just consumed the opening "[" token.
 define function parse-field-options
-    (parser :: <parser>)
- => (default :: false-or(<string>), options :: <field-options>)
+    (parser :: <parser>) => (default :: false-or(<string>), options :: <field-options>)
   let default = #f;
   let options = make(<field-options>);
-  iterate loop (token = next-token(parser))
-    if (token)
-      expect-token(parser, "=");
-      let value = next-token(parser);
-      select (token.token-text by \=)
-        "packed" =>
-          field-options-packed(options) := token-value(value);
-        "deprecated" =>
-          field-options-deprecated(options) := token-value(value);
-        "default" =>
-          default := token-text(value);
-        // TODO: handle more well-known options.
-        otherwise =>
-          // TODO: store in uninterpreted-option slot.
-          format-out("WARNING: ignoring field option %= = %=\n",
-                     token.token-text, value.token-text);
-      end select;
-      if (',' == token-value(expect-token(parser, #(",", "]"))))
-        loop(next-token(parser))
-      end;
-    end if;
+  iterate loop (name-token = next-token(parser))
+    expect-token(parser, "=");
+    let token = next-token(parser);
+    select (name-token.token-text by \=)
+      "ctype" =>
+        field-options-ctype(options)
+          := enum-name-to-value(<field-options-ctype>, token.token-text);
+      "default" =>
+        default := token.token-text;
+      "deprecated" =>
+        field-options-deprecated(options) := token.token-value;
+      "jstype" =>
+        field-options-jstype(options)
+          := enum-name-to-value(<field-options-js-type>, token.token-text);
+      "lazy" =>
+        field-options-lazy(options) := token.token-value;
+      "packed" =>
+        field-options-packed(options) := token.token-value;
+      "unverified_lazy" =>
+        field-options-unverified-lazy(options) := token.token-value;
+      "weak" =>
+        field-options-weak(options) := token.token-value;
+      otherwise =>
+        let uoption = parse-uninterpreted-option(parser, name-token, token);
+        add-field-options-uninterpreted-option(options, uoption);
+    end select;
+    if (',' == token-value(expect-token(parser, #(",", "]"))))
+      loop(next-token(parser))
+    end;
   end iterate;
   values(default, options)
+end function;
+
+define function parse-uninterpreted-option
+    (parser :: <parser>, name-token :: <token>, value-token :: <token>)
+ => (option :: <uninterpreted-option>)
+  let name = parse-uninterpreted-option-name(name-token.token-text);
+  let option = make(<uninterpreted-option>, name: name);
+  let value = value-token.token-value;
+  select (value-token by instance?)
+    <identifier-token> =>
+      uninterpreted-option-identifier-value(option) := value;
+    <number-token> =>
+      if (instance?(value, <float>))
+        uninterpreted-option-double-value(option) := as(<double-float>, value);
+      elseif (negative?(value))
+        uninterpreted-option-negative-int-value(option) := value;
+      else
+        uninterpreted-option-positive-int-value(option) := value;
+      end;
+    <string-token> =>
+      uninterpreted-option-string-value(option) := as(<byte-vector>, value);
+    otherwise =>
+      // What do they mean by aggregate value? Map literal? For now just store the
+      // text. It's typed as string in any case.
+      uninterpreted-option-aggregate-value(option) := value-token.token-text;
+  end select;
+  option
+end function;
+
+// Parse an option name like "foo.(bar.baz).moo" into NamePart objects.
+// E.g.,{ ["foo", false], ["bar.baz", true], ["moo", false] } represents
+// "foo.(bar.baz).moo".
+define function parse-uninterpreted-option-name
+    (name :: <string>) => (name-parts :: <stretchy-vector>)
+  local method add-part (i, j, extension?, parts)
+          iff(i < j, // can be equal e.g. for ")." sequence
+              add!(parts,
+                   make(<uninterpreted-option-name-part>,
+                        name-part: copy-sequence(name, start: i, end: j),
+                        is-extension: extension?)),
+              parts)
+        end;
+  iterate loop (i = 0, j = 0, parts = make(<stretchy-vector>), extension? = #f)
+    if (j >= name.size)
+      add-part(i, j, extension?, parts)
+    else
+      select (name[j])
+        '(' =>
+          loop(i + 1, j + 1, parts, #t);
+        ')' =>
+          loop(j + 1, j + 1, add-part(i, j, #t, parts), #f);
+        '.' =>
+          if (extension?)
+            // extension parts retain their internal dots, just bump j.
+            loop(i, j + 1, parts, #t)
+          else
+            loop(j + 1, j + 1, add-part(i, j, #f, parts), extension?)
+          end;
+        otherwise =>
+          loop(i, j + 1, parts, extension?);
+      end
+    end
+  end
 end function;

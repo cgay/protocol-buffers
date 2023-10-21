@@ -35,6 +35,9 @@ end method;
 // print-object
 //
 
+// These are the methods I found I needed while debugging protobufs. I made no
+// attempt to define them for all classes in descriptor-pb.dylan.
+
 define method print-object
     (desc :: <file-descriptor-set>, stream :: <stream>) => ()
   printing-object (desc, stream)
@@ -72,6 +75,15 @@ define method print-object
            label,
            field-descriptor-proto-name(desc),
            field-descriptor-proto-number(desc));
+  end;
+end method;
+
+define method print-object
+    (part :: <uninterpreted-option-name-part>, stream :: <stream>) => ()
+  printing-object (part, stream)
+    format(stream, "%= %=",
+           part.uninterpreted-option-name-part-name-part,
+           part.uninterpreted-option-name-part-is-extension);
   end;
 end method;
 

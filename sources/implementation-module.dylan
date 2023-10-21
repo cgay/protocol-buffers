@@ -57,43 +57,43 @@ define module protocol-buffers-impl
     zigzag-encode-64,
 
     // Lexer (probably don't need most of these)
-    <lexer>,
-    <lexer-error>,
-    <token>,
-    <punctuation-token>,
-    <reserved-word-token>,
-    <identifier-token>,
-    <number-token>,
-    <string-token>,
     <boolean-token>,
     <comment-token>,
+    <identifier-token>,
+    <lexer-error>,
+    <lexer>,
+    <number-token>,
+    <punctuation-token>,
+    <reserved-word-token>,
+    <string-token>,
+    <token>,
     <whitespace-token>,
+    read-token,
     token-column,
     token-line,
     token-text,
     token-value,
-    read-token,
 
-    // Parser API
-    <parser>,
-    <parse-error>,
-    next-token,
-    parse-file-stream,
-    parse-message,
+    // Parser
     $syntax-proto2,
     $syntax-proto3,
+    <parse-error>,
+    <parser>,
+    next-token,
+    parse-field-options,
+    parse-file-stream,
+    parse-message,
+    parse-uninterpreted-option-name,
 
-    // Code generator API
+    // Code generator
     <generator>,
     generate-dylan-code,
 
     // Utilities
     camel-to-kebob,
     debug,
-
-    // For testing only
-    dylan-name,
     dylan-class-name,
+    dylan-name,
     parse-option-name,
     token-comments;
 end module;

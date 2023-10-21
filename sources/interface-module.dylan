@@ -11,6 +11,8 @@ define module protocol-buffers
     descriptor-name,
     enum-value,
     enum-value-name,
+    enum-name-to-value,
+    enum-value-to-name,
 
     $max-field-number,
 

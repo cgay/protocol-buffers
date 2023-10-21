@@ -59,6 +59,47 @@ define open abstract class <protocol-buffer-enum> (<protocol-buffer-object>)
     required-init-keyword: value:;
 end class;
 
+// This is a quick and dirty way to manage enum name <-> value mappings.
+// Is there a better way? (This is not thread safe for one thing.)
+define constant $enum-mappings-name2value = make(<table>); // class -> <string-table>
+define constant $enum-mappings-value2name = make(<table>); // class -> <table>
+
+define method make
+    (class :: subclass(<protocol-buffer-enum>),
+     #key name :: <string>, value :: <int32>) => (instance :: <protocol-buffer-enum>)
+  let name2value = element($enum-mappings-name2value, class, default: #f);
+  if (~name2value)
+    name2value := make(<string-table>);
+    $enum-mappings-name2value[class] := name2value;
+  end;
+  name2value[name] := value;
+
+  let value2name = element($enum-mappings-value2name, class, default: #f);
+  if (~value2name)
+    value2name := make(<table>);
+    $enum-mappings-value2name[class] := value2name;
+  end;
+  value2name[value] := name;
+
+  next-method()
+end method;
+
+define function enum-name-to-value
+    (class :: subclass(<protocol-buffer-enum>), name :: <string>)
+ => (value :: false-or(<int32>))
+  let name2value = element($enum-mappings-name2value, class, default: #f)
+    | pb-error("%= does not name a generated protocol buffer enum class", class);
+  element(name2value, name, default: #f)
+end function;
+
+define function enum-value-to-name
+    (class :: subclass(<protocol-buffer-enum>), value :: <int32>)
+ => (name :: false-or(<string>))
+  let value2name = element($enum-mappings-value2name, class, default: #f)
+    | pb-error("%= does not name a generated protocol buffer enum class", class);
+  element(value2name, value, default: #f)
+end function;
+
 // A set of constants to identify the scalar types defined in the protobuf
 // spec.  https://developers.google.com/protocol-buffers/docs/proto3#scalar
 define enum <scalar-type> ()
