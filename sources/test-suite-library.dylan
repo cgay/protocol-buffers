@@ -5,8 +5,9 @@ define library protocol-buffers-test-suite
   use big-integers;
   use generic-arithmetic;
   use io;
+  use system;
 
-  // Libraries from packages
+  // Libraries from package dependencies
   use protocol-buffers;
   use strings;
   use testworks;
@@ -14,7 +15,13 @@ define library protocol-buffers-test-suite
 end library;
 
 define module protocol-buffers-test-suite
+  // Our own modules.
+  use google-protobuf;          // generated from descriptor.proto
+  use protocol-buffers;
+  use protocol-buffers-impl;
+
   // Modules from Open Dylan
+  use file-system;
   use format,
     rename: { format-to-string => sformat }; // for brevity
   use format-out;
@@ -23,12 +30,11 @@ define module protocol-buffers-test-suite
     rename: { $maximum-integer => $maximum-big-int,
               $minimum-integer => $minimum-big-int,
               <integer> => <big-int> };
+  use locators;
   use print;
   use streams;
 
-  // Modules from packages
-  use google-protobuf;          // generated from descriptor.proto
-  use protocol-buffers-impl;
+  // Modules from package dependencies
   use strings;
   use testworks;
   use uncommon-dylan;
