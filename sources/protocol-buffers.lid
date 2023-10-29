@@ -11,6 +11,7 @@ Files: library.dylan
        wire-format.dylan
        idl-lexer.dylan
        idl-parser.dylan
+       api.dylan
        codegen.dylan
 Platforms: x86_64-darwin
            x86_64-freebsd

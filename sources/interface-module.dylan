@@ -13,7 +13,7 @@ define module protocol-buffers
     enum-value-name,
     enum-name-to-value,
     enum-value-to-name,
-
+    find-descriptor,
     $max-field-number,
 
     // Types

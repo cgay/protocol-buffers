@@ -11,7 +11,7 @@ end function;
 
 define test test-parse-reserved-spec/good ()
   let good = """
-    message Good {
+    message GoodRes {
       reserved 10, 20 to 30, 40 to max;
       reserved "foo", "bar";
     }
@@ -43,15 +43,15 @@ end test;
 define test test-parse-reserved-spec/bad ()
   let file = make(<file-descriptor-proto>, name: "test", syntax: $syntax-proto2);
   // Format: #(message proto, text to appear in error message)
-  for (item in #(#("message Bad { reserved 10.2; }", "field numbers in the range 1-"),
-                 #("message Bad { reserved 0; }",    "field numbers in the range 1-"),
-                 #("message Bad { reserved 1-10; }", "comma"),
-                 #("message Bad { reserved 8 9; }",  "comma"),
-                 #("message Bad { reserved abc; }",  "want field name or number"),
-                 #("message Bad { reserved \"9a\"; }", "not a valid identifier"),
-                 #("message Bad { reserved 10; optional string foo = 10; }", "marked as reserved"),
-                 #("message Bad { reserved 10 to 20; reserved 15 to 25; }", "overlap"),
-                 #("message Bad { reserved 10; reserved 10; }", "overlap")))
+  for (item in #(#("message Bad1 { reserved 10.2; }", "field numbers in the range 1-"),
+                 #("message Bad2 { reserved 0; }",    "field numbers in the range 1-"),
+                 #("message Bad3 { reserved 1-10; }", "comma"),
+                 #("message Bad4 { reserved 8 9; }",  "comma"),
+                 #("message Bad5 { reserved abc; }",  "want field name or number"),
+                 #("message Bad6 { reserved \"9a\"; }", "not a valid identifier"),
+                 #("message Bad7 { reserved 10; optional string foo = 10; }", "marked as reserved"),
+                 #("message Bad8 { reserved 10 to 20; reserved 15 to 25; }", "overlap"),
+                 #("message Bad9 { reserved 10; reserved 10; }", "overlap")))
     let (message, text) = apply(values, item);
     let parser = parser-for(message);
     block ()
@@ -67,7 +67,7 @@ end test;
 
 // TODO: test extension options
 define test test-parse-extensions-spec/good ()
-  let good = "message Good { extensions 10, 20 to 30, 40 to max; }";
+  let good = "message GoodExt { extensions 10, 20 to 30, 40 to max; }";
   let file = make(<file-descriptor-proto>, name: "test", syntax: $syntax-proto2);
   let parser = parser-for(good);
   let msg = parse-message(parser, file, #(), next-token(parser));
@@ -91,16 +91,16 @@ end test;
 define test test-parse-extensions-spec/bad ()
   let file = make(<file-descriptor-proto>, name: "test", syntax: $syntax-proto2);
   // Format: #(message proto, text to appear in error message)
-  for (item in #(#("message Bad { extensions 10.2; }", "must be in the range 1-"),
-                 #("message Bad { extensions 0; }",    "must be in the range 1-"),
-                 #("message Bad { extensions 1-10; }", "unexpected token"),
-                 #("message Bad { extensions 8 9; }",  "unexpected token"),
-                 #("message Bad { extensions abc; }",  "want field number"),
-                 #("message Bad { extensions 10; optional string foo = 10; }",
+  for (item in #(#("message ExtBad1 { extensions 10.2; }", "must be in the range 1-"),
+                 #("message ExtBad2 { extensions 0; }",    "must be in the range 1-"),
+                 #("message ExtBad3 { extensions 1-10; }", "unexpected token"),
+                 #("message ExtBad4 { extensions 8 9; }",  "unexpected token"),
+                 #("message ExtBad5 { extensions abc; }",  "want field number"),
+                 #("message ExtBad6 { extensions 10; optional string foo = 10; }",
                    "part of an extension range"),
-                 #("message Bad { extensions 10 to 20; extensions 15 to 25; }",
+                 #("message ExtBad7 { extensions 10 to 20; extensions 15 to 25; }",
                    "overlap"),
-                 #("message Bad { extensions 10; extensions 10; }",
+                 #("message ExtBad8 { extensions 10; extensions 10; }",
                    "overlap")))
     let (message, text) = apply(values, item);
     let parser = parser-for(message);

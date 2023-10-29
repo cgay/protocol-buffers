@@ -191,8 +191,11 @@ define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
            """
            Module: %s
 
+           // This file was auto-generated from %s by pbgen.
 
-           """, dylan-module-name(gen, file));
+           """,
+           dylan-module-name(gen, file),
+           file.file-descriptor-proto-name);
       for (enum in file-descriptor-proto-enum-type(file) | #[])
         emit(gen, enum);
       end;

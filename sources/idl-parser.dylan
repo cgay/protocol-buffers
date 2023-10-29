@@ -159,7 +159,8 @@ define function parse-file-stream
           file.file-descriptor-proto-options := options;
           parse-file-option(parser, options);
         #"message" =>
-          let message = parse-message(parser, file, #(), token);
+          let package = file-descriptor-proto-package(file);
+          let message = parse-message(parser, file, list(package), token);
           add-file-descriptor-proto-message-type(file, message);
         #"enum" =>
           add-file-descriptor-proto-enum-type(file, parse-enum(parser, #(), token));
@@ -170,7 +171,7 @@ define function parse-file-stream
             parse-error("unexpected token: %s", token);
           end;
       end select;
-      loop(next-token(parser));
+      peek-token(parser) & loop(next-token(parser));
     end if;
   end iterate;
 end function;
@@ -258,6 +259,7 @@ define function parse-message
   expect-token(parser, "{");
   let syntax = file-descriptor-proto-syntax(file);
   let message = make(<descriptor-proto>, name: name);
+  register-descriptor(join(reverse(name-path), "."), message);
   block (done)
     while (#t)
       let token = next-token(parser);
@@ -402,6 +404,7 @@ define function parse-enum
     value.descriptor-parent := enum;
   end;
   maybe-attach-comments-to(parser, enum, enum-token);
+  register-descriptor(join(reverse(name-path), "."), enum);
   enum
 end function;
 
@@ -606,11 +609,8 @@ define function parse-message-field
     & parse-error("'group' may not be used as a field name: %=", name);
   expect-token(parser, "=");
   let number = expect-token(parser, <number-token>);
-  let (options, default, json-name)
-    = if ('[' == token-value(expect-token(parser, #(";", "["))))
-        parse-field-options(parser)
-        // TODO: does this need expect-token(parser, ";")? write a test.
-      end;
+  let delim = token-value(expect-token(parser, #(";", "[")));
+  let (options, default, json-name) = ('[' == delim) & parse-field-options(parser);
   let field
     = make(<field-descriptor-proto>,
            name: name.token-text,

@@ -1,5 +1,5 @@
 Module: google-protobuf
-Synopsis: Additional behavior for the generated descriptor classes.
+Synopsis: Additional behavior for classes generated from descriptor.proto.
 
 
 //

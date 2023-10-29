@@ -88,6 +88,7 @@ define module protocol-buffers-impl
     // Code generator
     <generator>,
     generate-dylan-code,
+    parse-file,
 
     // Utilities
     camel-to-kebob,
