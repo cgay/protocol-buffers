@@ -8,7 +8,8 @@ Synopsis: Ad-hoc parser for .proto Interface Definition Language
 // * https://protobuf.com/docs/language-spec#character-classes
 // * https://github.com/bufbuild/protocompile/blob/main/parser/
 
-// The parser (next-token, expect-token) never sees or cares about whitespace.
+// The parser (peek-token, consume-token, expect-token) never sees or cares about
+// whitespace.
 
 // TODO: 2_147_483_646 (2^31 - 2) for message set wire format
 define constant $max-field-number :: <int> = 536_870_911;
@@ -48,8 +49,7 @@ define function peek-token
       end
 end function;
 
-// TODO: rename to consume-token (or just peek and consume)
-define function next-token
+define function consume-token
     (parser :: <parser>) => (token :: <token>)
   let token = parser.peeked-token
                 | peek-token(parser)
@@ -62,7 +62,7 @@ define generic expect-token
     (parser :: <parser>, token-specifier :: <object>) => (token :: <token>);
 
 define method expect-token (parser :: <parser>, class :: <class>) => (token :: <token>)
-  let token = next-token(parser);
+  let token = consume-token(parser);
   if (~instance?(token, class))
     parse-error("expected a token of type %= but got %=", class, token);
   end;
@@ -74,7 +74,7 @@ define method expect-token (parser :: <parser>, text :: <string>) => (token :: <
 end method;
 
 define method expect-token (parser :: <parser>, strings :: <seq>) => (token :: <token>)
-  let token = next-token(parser);
+  let token = consume-token(parser);
   if (~member?(token.token-text, strings, test: \=))
     parse-error("expected token %s but got %=",
                 join(strings, ", ",
@@ -88,12 +88,12 @@ end method;
 
 // Retrieve and discard tokens up to the next semicolon.
 define function discard-statement (parser :: <parser>) => (#rest tokens)
-  iterate loop (t = next-token(parser), tokens = #())
+  iterate loop (t = consume-token(parser), tokens = #())
     if (t)
       if (t.token-value == ';')
         reverse!(tokens)
       else
-        loop(next-token(parser), pair(t, tokens))
+        loop(consume-token(parser), pair(t, tokens))
       end
     end
   end
@@ -121,7 +121,7 @@ end function;
 // file-descriptor-proto-name slot is the responsibility of the caller.
 define function parse-file-stream
     (parser :: <parser>, file :: <file-descriptor-proto>) => ()
-  iterate loop (token = next-token(parser))
+  iterate loop (token = consume-token(parser))
     if (token)
       select (token.token-value)
         #"syntax" =>
@@ -154,7 +154,7 @@ define function parse-file-stream
             parse-error("unexpected token: %s", token);
           end;
       end select;
-      peek-token(parser) & loop(next-token(parser));
+      peek-token(parser) & loop(consume-token(parser));
     end if;
   end iterate;
 end function;
@@ -164,7 +164,7 @@ end function;
 // `options`.  "option maybe.fully.qualified.name = value ;"
 define function parse-file-option
     (parser :: <parser>, options :: <file-options>) => ()
-  let name-token = peek-token(parser) | next-token(parser);
+  let name-token = peek-token(parser) | consume-token(parser);
   let name = name-token.token-text;
   // TODO: should be able to iterate over the fields of <file-options> rather than
   // enumerating them here.
@@ -193,7 +193,7 @@ define function parse-file-option
         otherwise                       => #f;
       end;
   if (setter)
-    next-token(parser);         // consume peeked option name token
+    consume-token(parser);         // consume peeked option name token
     expect-token(parser, "=");
     // optimize_for is the only non-primitive typed file option so handle it specially.
     // The rest we'll just treat as <object> for now, and depend on the setters to blow
@@ -217,7 +217,7 @@ end function;
 // TODO: maps, message literals....
 define function parse-option-value
     (parser :: <parser>, type :: <type>) => (value, value-text :: <string>)
-  let token = next-token(parser);
+  let token = consume-token(parser);
   let text = token.token-text;
   values(select (type by subtype?)
            <protocol-buffer-enum> =>
@@ -240,7 +240,7 @@ define function parse-message
     (parser :: <parser>, file :: <file-descriptor-proto>, parent-path :: <list>,
      message-token :: <token>)
  => (msg :: <descriptor-proto>)
-  let name-token = next-token(parser);
+  let name-token = consume-token(parser);
   let name = name-token.token-text;
   let name-path = pair(name, parent-path);
   expect-token(parser, "{");
@@ -249,7 +249,7 @@ define function parse-message
   register-descriptor(join(reverse(name-path), "."), message);
   block (done)
     while (#t)
-      let token = next-token(parser);
+      let token = consume-token(parser);
       let text = token.token-text;
       select (token.token-value)
         #"repeated", #"optional", #"required" =>
@@ -364,14 +364,14 @@ end function;
 define function parse-enum
     (parser :: <parser>, parent-names :: <list>, enum-token :: <token>)
  => (enum :: <enum-descriptor-proto>)
-  let name-token = next-token(parser);
+  let name-token = consume-token(parser);
   let name = name-token.token-text;
   let name-path = pair(name, parent-names);
   expect-token(parser, "{");
   let enum = make(<enum-descriptor-proto>, name: name);
   block (done)
     while (#t)
-      let token = next-token(parser);
+      let token = consume-token(parser);
       select (token.token-value)
         #"option" =>
           discard-statement(parser);
@@ -426,7 +426,7 @@ end function;
 define function parse-enum-value-options
     (parser :: <parser>) => (options :: <enum-value-options>)
   let options = make(<enum-value-options>);
-  iterate loop (token = next-token(parser))
+  iterate loop (token = consume-token(parser))
     if (~token | token.token-value ~== '}')
       expect-token(parser, "=");
       let value = expect-token(parser, <boolean-token>);
@@ -440,7 +440,7 @@ define function parse-enum-value-options
                      token.token-text, value.token-text);
       end select;
       if (',' == token-value(expect-token(parser, #(",", "]"))))
-        loop(next-token(parser))
+        loop(consume-token(parser))
       end;
     end if;
   end iterate;
@@ -453,11 +453,11 @@ end function;
 // https://protobuf.com/docs/language-spec#package-declaration
 define function parse-qualified-identifier
     (parser :: <parser>) => (name :: <seq>)
-  iterate loop (token = next-token(parser), names = #())
+  iterate loop (token = consume-token(parser), names = #())
     let name = token.token-text;
     let tok = expect-token(parser, #(";", "."));
     if (tok.token-value == '.')
-      loop(next-token(parser), pair(name, names))
+      loop(consume-token(parser), pair(name, names))
     else
       reverse!(pair(name, names))
     end
@@ -470,7 +470,7 @@ end function;
 //   reserved "foo", "bar", "baz";
 define function parse-reserved-spec
     (parser :: <parser>, message :: <descriptor-proto>) => ()
-  iterate loop (token = next-token(parser))
+  iterate loop (token = consume-token(parser))
     let value = token.token-value;
     select (token by instance?)
       <string-token> =>
@@ -481,7 +481,7 @@ define function parse-reserved-spec
         end;
         add-descriptor-proto-reserved-name(message, value);
         if (',' == token-value(expect-token(parser, #[";", ","])))
-          loop(next-token(parser));
+          loop(consume-token(parser));
         end;
       <number-token> =>
         if (~instance?(value, <int>)
@@ -493,14 +493,14 @@ define function parse-reserved-spec
         // Note that range end is exclusive.
         let range = make(<descriptor-proto-reserved-range>, start: value, end: value + 1);
         add-descriptor-proto-reserved-range(message, range);
-        let punct = next-token(parser);
+        let punct = consume-token(parser);
         select (punct.token-value by \=)
           ';' =>
             #f;                 // done
           ',' =>
-            loop(next-token(parser));
+            loop(consume-token(parser));
           #"to" =>
-            let token2 = next-token(parser);
+            let token2 = consume-token(parser);
             let value2 = 1 + if (token2.token-value = #"max")
                                $max-field-number
                              else
@@ -511,7 +511,7 @@ define function parse-reserved-spec
             end;
             descriptor-proto-reserved-range-end(range) := value2;
             if (',' == token-value(expect-token(parser, #[";", ","])))
-              loop(next-token(parser));
+              loop(consume-token(parser));
             end;
           otherwise =>
             parse-error("unexpected token %s, want semicolon, comma or 'to'", punct);
@@ -526,7 +526,7 @@ end function;
 //   extensions 10 to 20, 50 to 100, 20000 to max;
 define function parse-extensions-spec
     (parser :: <parser>, message :: <descriptor-proto>) => ()
-  iterate loop (token = next-token(parser))
+  iterate loop (token = consume-token(parser))
     let value = token.token-value;
     if (value ~== ';')
       if (~instance?(token, <number-token>))
@@ -541,7 +541,7 @@ define function parse-extensions-spec
       // Note that range end is exclusive.
       let range = make(<descriptor-proto-extension-range>, start: value, end: value + 1);
       add-descriptor-proto-extension-range(message, range);
-      let punct = next-token(parser);
+      let punct = consume-token(parser);
       select (punct.token-text by \=)
         ";" =>
           #f;                 // done
@@ -549,16 +549,16 @@ define function parse-extensions-spec
           parse-extension-range-options(parser, range);
           expect-token(parser, ";"); // and done
         "," =>
-          loop(next-token(parser));
+          loop(consume-token(parser));
         "to" =>
-          let token2 = next-token(parser);
+          let token2 = consume-token(parser);
           let value2 = token2.token-value;
           if (value2 == #"max") value2 := $max-field-number; end;
           (instance?(value2, <int>) & value <= value2)
             | parse-error("invalid extension range end: %s", token2);
           descriptor-proto-extension-range-end(range) := value2 + 1;
           if (',' == token-value(expect-token(parser, #[";", ","])))
-            loop(next-token(parser));
+            loop(consume-token(parser));
           end;
         otherwise =>
           parse-error("unexpected token %s, want ';', '[', \"to\", or ','.", punct);
@@ -570,10 +570,10 @@ end function;
 // Parse ExtensionRangeOptions into `range`.
 define function parse-extension-range-options
     (parser :: <parser>, range :: <descriptor-proto-extension-range>) => ()
-  iterate loop (token = next-token(parser))
+  iterate loop (token = consume-token(parser))
     // TODO: for now just discard up to the "]"
     if (token & token.token-value ~== ']')
-      loop(next-token(parser))
+      loop(consume-token(parser))
     end;
   end;
 end function;
@@ -585,12 +585,12 @@ define function parse-message-field
     (parser :: <parser>, syntax :: <string>,
      #key label :: false-or(<token>), type :: false-or(<token>))
  => (field :: <field-descriptor-proto>)
-  let type = type | next-token(parser);
+  let type = type | consume-token(parser);
   // TODO: field types that are fully qualified names. skipping for now since
   // descriptor.proto doesn't use them.
   instance?(type, <identifier-token>)
     | parse-error("expected a message field type: %=", type);
-  let name = next-token(parser);
+  let name = consume-token(parser);
   // TODO: group is explicitly called out as reserved, but there must be others?
   name.token-text = "group"
     & parse-error("'group' may not be used as a field name: %=", name);
@@ -652,7 +652,7 @@ define function parse-field-options
           json-name := value;
         end,
         method parse-known (type :: <type>, setter :: <func>, #key use-string-rep?)
-          next-token(parser);   // discard the name token
+          consume-token(parser);   // discard the name token
           expect-token(parser, "=");
           let (value, text)
             = parse-option-value(parser, iff(use-string-rep?, <object>, type));
@@ -730,13 +730,13 @@ define function parse-uninterpreted-option-name
                            is-extension: ext?));
         end;
   iterate loop (token = peek-token(parser), prev = #f, ext-parts = #f)
-    token | next-token(parser); // signal EOF error
+    token | consume-token(parser); // signal EOF error
     if ('=' == token.token-value)
       iff(empty?(parts) | ext-parts,
           parse-error("incomplete option name (unmatched open paren?): %=", token),
           parts)
     else
-      next-token(parser);       // consume all tokens except the final '='
+      consume-token(parser);       // consume all tokens except the final '='
       select (token.token-value)
         '(' =>
           iff(ext-parts,

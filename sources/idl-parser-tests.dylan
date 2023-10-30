@@ -18,7 +18,7 @@ define test test-parse-reserved-spec/good ()
     """;
   let file = make(<file-descriptor-proto>, name: "test", syntax: $syntax-proto2);
   let parser = parser-for(good);
-  let msg = parse-message(parser, file, #(), next-token(parser));
+  let msg = parse-message(parser, file, #(), consume-token(parser));
 
   // Check the ranges
   let got-ranges = descriptor-proto-reserved-range(msg);
@@ -55,7 +55,7 @@ define test test-parse-reserved-spec/bad ()
     let (message, text) = apply(values, item);
     let parser = parser-for(message);
     block ()
-      parse-message(parser, file, #(), next-token(parser));
+      parse-message(parser, file, #(), consume-token(parser));
       assert-true(#f, "got no error for %=", message);
     exception (err :: <parse-error>)
       let err-text = sformat("%s", err);
@@ -70,7 +70,7 @@ define test test-parse-extensions-spec/good ()
   let good = "message GoodExt { extensions 10, 20 to 30, 40 to max; }";
   let file = make(<file-descriptor-proto>, name: "test", syntax: $syntax-proto2);
   let parser = parser-for(good);
-  let msg = parse-message(parser, file, #(), next-token(parser));
+  let msg = parse-message(parser, file, #(), consume-token(parser));
 
   let got-ranges = descriptor-proto-extension-range(msg);
   let want-ranges
@@ -105,7 +105,7 @@ define test test-parse-extensions-spec/bad ()
     let (message, text) = apply(values, item);
     let parser = parser-for(message);
     block ()
-      parse-message(parser, file, #(), next-token(parser));
+      parse-message(parser, file, #(), consume-token(parser));
       assert-true(#f, "got no error for %=", message);
     exception (err :: <parse-error>)
       let err-text = sformat("%s", err);

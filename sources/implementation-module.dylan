@@ -79,7 +79,7 @@ define module protocol-buffers-impl
     $syntax-proto3,
     <parse-error>,
     <parser>,
-    next-token,
+    consume-token,
     parse-field-options,
     parse-file-stream,
     parse-message,
