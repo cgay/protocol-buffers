@@ -58,23 +58,6 @@ define function next-token
   parser.previous-token := token
 end function;
 
-define function unconsume-token
-    (parser :: <parser>, token) => ()
-  if (parser.peeked-token)
-    parse-error("can't unconsume token %=, a token has already been peeked", token);
-  elseif (~parser.previous-token)
-    parse-error("can't unconsume token %=, there is no previous token", token);
-  elseif (select (token by instance?)
-            <token> => token ~== parser.previous-token;
-            <string> => token ~= parser.previous-token.token-text;
-          end)
-    parse-error("can't unconsume token %=, not equal to previous token", token);
-  else
-    parser.peeked-token := token;
-    parser.previous-token := #f; // could do better here
-  end;
-end function;
-
 define generic expect-token
     (parser :: <parser>, token-specifier :: <object>) => (token :: <token>);
 
@@ -184,7 +167,7 @@ define function parse-file-option
   let name-token = peek-token(parser) | next-token(parser);
   let name = name-token.token-text;
   // TODO: should be able to iterate over the fields of <file-options> rather than
-  // enumerating them here. Code generator needs to emit introspection APIs.
+  // enumerating them here.
   let setter
     = select (name by \=)
         "java_package"                  => file-options-java-package-setter;
@@ -658,36 +641,36 @@ end function parse-message-field;
 define function parse-field-options
     (parser :: <parser>)
  => (options :: <field-options>, default :: false-or(<string>), json-name :: false-or(<string>))
+  let options = make(<field-options>);
   // Special handling for the two "pseudo options", default and json_name.
   let default = #f;
   let json-name = #f;
-  let options = make(<field-options>);
+  local method set-default (value :: <string>, ignore-options)
+          default := value;
+        end,
+        method set-json-name (value :: <string>, ignore-options)
+          json-name := value;
+        end,
+        method parse-known (type :: <type>, setter :: <func>, #key use-string-rep?)
+          next-token(parser);   // discard the name token
+          expect-token(parser, "=");
+          let (value, text)
+            = parse-option-value(parser, iff(use-string-rep?, <object>, type));
+          setter(iff(use-string-rep?, text, value), options);
+        end;
   iterate loop ()
-    let name-token = next-token(parser);
-    let equals = expect-token(parser, "=");
-    select (name-token.token-text by \=)
-      "ctype" =>
-        field-options-ctype(options) := parse-option-value(parser, <field-options-ctype>);
-      "default" =>
-        let (_, value-text) = parse-option-value(parser, <object>);
-        default := value-text;
-      "deprecated" =>
-        field-options-deprecated(options) := parse-option-value(parser, <bool>);
-      "json_name" =>
-        json-name := parse-option-value(parser, <string>);
-      "jstype" =>
-        field-options-jstype(options) := parse-option-value(parser, <field-options-js-type>);
-      "lazy" =>
-        field-options-lazy(options) := parse-option-value(parser, <bool>);
-      "packed" =>
-        field-options-packed(options) := parse-option-value(parser, <bool>);
-      "unverified_lazy" =>
-        field-options-unverified-lazy(options) := parse-option-value(parser, <bool>);
-      "weak" =>
-        field-options-weak(options) := parse-option-value(parser, <bool>);
+    select (token-text(peek-token(parser)) by \=)
+      "ctype"           => parse-known(<field-options-ctype>, field-options-ctype-setter);
+      "default"         => parse-known(<string>, set-default, use-string-rep?: #t);
+      "deprecated"      => parse-known(<bool>,   field-options-deprecated-setter);
+      "json_name"       => parse-known(<string>, set-json-name);
+      "jstype"          => parse-known(<field-options-js-type>, field-options-jstype-setter);
+      "lazy"            => parse-known(<bool>, field-options-lazy-setter);
+      "packed"          => parse-known(<bool>, field-options-packed-setter);
+      "unverified_lazy" => parse-known(<bool>, field-options-unverified-lazy-setter);
+      "weak"            => parse-known(<bool>, field-options-weak-setter);
       otherwise =>
-        unconsume-token(parser, equals);
-        let uoption = parse-uninterpreted-option(parser, token: name-token);
+        let uoption = parse-uninterpreted-option(parser);
         add-field-options-uninterpreted-option(options, uoption);
     end select;
     if (',' == token-value(expect-token(parser, #(",", "]"))))
@@ -700,9 +683,8 @@ end function;
 // Parse an uninterpreted (i.e., unrecognized by the protobuf spec) option from compact
 // field options.
 define function parse-uninterpreted-option
-    (parser :: <parser>, #key token :: <token> = next-token(parser))
- => (option :: <uninterpreted-option>)
-  let name = parse-uninterpreted-option-name(parser, token: token);
+    (parser :: <parser>) => (option :: <uninterpreted-option>)
+  let name = parse-uninterpreted-option-name(parser);
   expect-token(parser, "=");
   let option = make(<uninterpreted-option>, name: name);
   let value-token = peek-token(parser);
@@ -740,46 +722,48 @@ end function;
 //
 // BNF: OptionName = ( SimpleName | ExtensionName ) [ dot OptionName ] .
 define function parse-uninterpreted-option-name
-    (parser :: <parser>, #key token :: <token> = next-token(parser))
- => (name-parts :: <stretchy-vector>)
+    (parser :: <parser>) => (name-parts :: <stretchy-vector>)
   let parts = make(<stretchy-vector>);
   local method add-part (text, ext?)
           add!(parts, make(<uninterpreted-option-name-part>,
                            name-part: text,
                            is-extension: ext?));
         end;
-  iterate loop (token = token, prev = #f, ext-parts = #f)
-    select (token.token-value)
-      '=' =>                    // done!
-        unconsume-token(parser, token);
-        iff(empty?(parts) | ext-parts,
-            parse-error("incomplete option name (unmatched open paren?): %=", token),
-            parts);
-      '(' =>
-        iff(ext-parts,
-            parse-error("option name may not have nested parentheses: %=", token),
-            loop(next-token(parser), '(', #()));
-      '.' =>
-        iff(prev == '.',
-            parse-error("option name may not have two consecutive dots: %=", token),
-            loop(next-token(parser), '.', ext-parts & pair(".", ext-parts)));
-      ')' =>
-        if (size(ext-parts | #()) > 0)
-          add-part(join(reverse!(ext-parts), ""), #t);
-          loop(next-token(parser), ')', #f)
-        else
-          parse-error("extension part of uninterpreted option name is empty: %=", token);
-        end;
-      otherwise =>
-        instance?(token, <identifier-token>)
-          | parse-error("unexpected token while parsing option name: %=", token);
-        let name = token.token-text;
-        if (ext-parts)
-          loop(next-token(parser), #"id", pair(name, ext-parts))
-        else
-          add-part(name, #f);
-          loop(next-token(parser), #"id", #f)
-        end
-    end select
+  iterate loop (token = peek-token(parser), prev = #f, ext-parts = #f)
+    token | next-token(parser); // signal EOF error
+    if ('=' == token.token-value)
+      iff(empty?(parts) | ext-parts,
+          parse-error("incomplete option name (unmatched open paren?): %=", token),
+          parts)
+    else
+      next-token(parser);       // consume all tokens except the final '='
+      select (token.token-value)
+        '(' =>
+          iff(ext-parts,
+              parse-error("option name may not have nested parentheses: %=", token),
+              loop(peek-token(parser), '(', #()));
+        '.' =>
+          iff(prev == '.',
+              parse-error("option name may not have two consecutive dots: %=", token),
+              loop(peek-token(parser), '.', ext-parts & pair(".", ext-parts)));
+        ')' =>
+          if (size(ext-parts | #()) > 0)
+            add-part(join(reverse!(ext-parts), ""), #t);
+            loop(peek-token(parser), ')', #f)
+          else
+            parse-error("extension part of uninterpreted option name is empty: %=", token);
+          end;
+        otherwise =>
+          instance?(token, <identifier-token>)
+            | parse-error("unexpected token while parsing option name: %=", token);
+          let name = token.token-text;
+          if (ext-parts)
+            loop(peek-token(parser), #"id", pair(name, ext-parts))
+          else
+            add-part(name, #f);
+            loop(peek-token(parser), #"id", #f)
+          end
+      end select
+    end if
   end iterate
 end function;
