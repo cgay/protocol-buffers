@@ -212,9 +212,12 @@ define function parse-file-option
   if (setter)
     next-token(parser);         // consume peeked option name token
     expect-token(parser, "=");
-    // optimize_for is the only non-primitive type so handle it specially.  The rest
-    // we'll just treat as <object> for now, and depend on the setters to blow up if the
-    // value has the wrong type.
+    // optimize_for is the only non-primitive typed file option so handle it specially.
+    // The rest we'll just treat as <object> for now, and depend on the setters to blow
+    // up if the value has the wrong type. Is it possible to have user-defined
+    // TODO: This will need to be more sophisticated to handle options like
+    //          option (foo.bar.Message) = { a:1 b:2 c:3 };
+    //       field-type(find-field(<file-descriptor-proto>, name))
     let type = iff(name = "optimize_for",
                    <file-options-optimize-mode>,
                    <object>);
@@ -222,6 +225,7 @@ define function parse-file-option
   else
     add-file-options-uninterpreted-option(options, parse-uninterpreted-option(parser));
   end;
+  expect-token(parser, ";");
 end function;
 
 // Parse an option value and verify that it matches the expected type. If the given type
@@ -236,7 +240,7 @@ define function parse-option-value
            <protocol-buffer-enum> =>
              instance?(token, <identifier-token>)
                | parse-error("expected an identifier: %=", token);
-             enum-name-to-value(type, text);
+             enum-name-to-enum(type, text);
            <protocol-buffer-message> =>
              parse-error("message constant values are not yet implemented (%=)", token);
            otherwise =>

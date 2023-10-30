@@ -193,6 +193,7 @@ define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
 
            // This file was auto-generated from %s by pbgen.
 
+
            """,
            dylan-module-name(gen, file),
            file.file-descriptor-proto-name);
