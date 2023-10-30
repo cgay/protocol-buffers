@@ -24,3 +24,58 @@ define test test-dylan-class-name ()
   check-equal("with parent",
               "<bar-foo>", dylan-class-name("Foo", parent: "bar"));
 end test;
+
+// Generate code for descriptor.proto and fail if there are differences
+// compared to the current descriptor-pb.dylan. If the diffs are expected
+// the changes should be committed to make this test pass.
+define test test-codegen-descriptor-pb ()
+  remove-all-keys!($descriptors); // other tests parse descriptor.proto too.
+  let tempdir = test-temp-directory();
+  let gen = make(<generator>,
+                 input-files: list(test-data-file("descriptor.proto")),
+                 output-directory: tempdir,
+                 library-name: #f);
+  generate-dylan-code(gen);
+
+  local
+    method read-lines (path)
+      let lines = make(<stretchy-vector>);
+      with-open-file (stream = path)
+        let line = #f;
+        while (line := read-line(stream, on-end-of-stream: #f))
+          add!(lines, line);
+        end;
+      end;
+      lines
+    end,
+    method diff (old, new)
+      let old-lines = choose(method (line)
+                               ~find-substring(line, "added by hand")
+                             end,
+                             read-lines(old));
+      let new-lines = read-lines(new);
+      expect-equal(old-lines.size, new-lines.size); // keep going to find first mismatch
+      for (old-line in old-lines,
+           new-line in new-lines,
+           line-number from 1)
+        assert-equal(old-line, new-line, """
+
+           current: %s
+           new:     %s
+           Line %d differs from current version. Do a full diff of the files and
+           if the differences are expected, copy the test file in place and
+           commit it, making sure to retain the lines added by hand.
+           """,
+                     old, new, line-number);
+      end;
+    end method;
+
+  let new-descriptor-pb = file-locator(tempdir, "descriptor-pb.dylan");
+  let new-module-pb = file-locator(tempdir, "google-protobuf-module-pb.dylan");
+  let sources-dir
+    = subdirectory-locator(locator-directory(test-data-directory()), "sources");
+  let old-descriptor-pb = file-locator(sources-dir, "descriptor-pb.dylan");
+  let old-module-pb = file-locator(sources-dir, "google-protobuf-module-pb.dylan");
+  diff(old-descriptor-pb, new-descriptor-pb);
+  diff(old-module-pb, new-module-pb);
+end test;

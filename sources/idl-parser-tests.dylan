@@ -148,5 +148,6 @@ define test test-parse-field-options ()
 end test;
 
 define test test-parse-descriptor-dot-proto ()
+  remove-all-keys!($descriptors); // other tests parse descriptor.proto too.
   assert-no-errors(parse-proto-file(test-data-file("descriptor.proto")));
 end test;

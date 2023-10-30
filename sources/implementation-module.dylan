@@ -56,6 +56,9 @@ define module protocol-buffers-impl
     zigzag-encode-32,
     zigzag-encode-64,
 
+    // api.dylan
+    $descriptors,               // needs clearing between tests
+
     // Lexer (probably don't need most of these)
     <boolean-token>,
     <comment-token>,
