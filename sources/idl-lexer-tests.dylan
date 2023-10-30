@@ -174,8 +174,5 @@ end test;
 define test test-attached-comments ()
   let tokens = read-all("""// test\nmessage Foo\n""", whitespace?: #f);
   assert-equal(3, tokens.size);
-  for (token in tokens, i from 0)
-    test-output("token comments size: %d %d\n", i, token.token-comments.size)
-  end;
   assert-equal(1, tokens[1].token-comments.size);
 end test;
