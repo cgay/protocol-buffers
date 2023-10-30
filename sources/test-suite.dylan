@@ -21,9 +21,11 @@ define function test-data-directory
   end
 end function;
 
-// TODO: This parses and generates code, only because the code generator provides a
-// convenient parse-file function to use. Probably should separate the two concerns. Need
-// a code gen API that only uses streams, for testing.
+define function test-data-file
+    (filename :: <string>) => (locator :: <file-locator>)
+  file-locator(test-data-directory(), filename)
+end function;
+
 define function parse-proto-file
     (path :: <pathname>, #key library-name)
  => (file :: <file-descriptor-proto>, comments-map :: <table>)
