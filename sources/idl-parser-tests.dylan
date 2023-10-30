@@ -146,3 +146,7 @@ define test test-parse-field-options ()
                uninterpreted-option-positive-int-value
                  (field-options-uninterpreted-option(options)[0]));
 end test;
+
+define test test-parse-descriptor-dot-proto ()
+  assert-no-errors(parse-proto-file(test-data-file("descriptor.proto")));
+end test;
