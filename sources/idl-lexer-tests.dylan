@@ -171,8 +171,22 @@ define test test-read-identifier ()
               #("a", '.', '(', "foo", '.', "bar", ')', '.', "b"));
 end test;
 
-define test test-attached-comments ()
-  let tokens = read-all("""// test\nmessage Foo\n""", whitespace?: #f);
-  assert-equal(3, tokens.size);
-  assert-equal(1, tokens[1].token-comments.size);
+define test test-lexer-attached-comments ()
+  let tokens = read-all("""
+    // test 1
+    // test 2
+    message Foo {
+      optional int32 bar // eol
+
+    """,
+                        whitespace?: #f);
+  assert-equal(9, tokens.size);
+
+  let message = tokens[2];
+  assert-equal(#"message", message.token-value);
+  assert-equal(2, message.token-comments.size);
+
+  let optional = tokens[5];
+  assert-equal(#"optional", optional.token-value);
+  assert-equal(1, optional.token-comments.size);
 end test;

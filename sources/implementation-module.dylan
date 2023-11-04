@@ -12,6 +12,7 @@ define module protocol-buffers-impl
   use bit-vector;
   use byte-vector,
     import: { <byte>, <byte-vector> };
+  use date;
   use file-system;
   use format,
     rename: { format-to-string => sformat }; // for brevity
@@ -82,6 +83,7 @@ define module protocol-buffers-impl
     $syntax-proto3,
     <parse-error>,
     <parser>,
+    attached-comments,
     consume-token,
     parse-field-options,
     parse-file-stream,

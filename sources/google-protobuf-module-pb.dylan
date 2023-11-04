@@ -1,6 +1,8 @@
 Module: dylan-user
 Synopsis: Code generated for package "google.protobuf" by pbgen.
 
+// Lines with "added by hand" (like this one) are ignored by tests.
+                                                  // added by hand
 define module google-protobuf
   use common-dylan;
   use protocol-buffers;
@@ -8,10 +10,9 @@ define module google-protobuf
   use print;                    // added by hand
   use streams;                  // added by hand
 
-  // added by hand
-  export
-    ranges-overlap?;
-
+  export                        // added by hand
+    ranges-overlap?;            // added by hand
+                                // added by hand
   export
     <file-descriptor-set>,
     file-descriptor-set-file,

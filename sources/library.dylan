@@ -8,8 +8,7 @@ define library protocol-buffers
   use generic-arithmetic;
   use io;
   use strings;
-  use system,
-    import: { file-system, locators, threads };
+  use system;
   use uncommon-dylan,
     import: { byte-vector,
               machine-words,

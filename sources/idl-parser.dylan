@@ -27,14 +27,9 @@ define class <parser> (<object>)
   constant slot %lexer :: <lexer>, required-init-keyword: lexer:;
   slot peeked-token :: false-or(<token>) = #f;
 
-  // Maps AST nodes (<descriptor-proto> et al) to <token>s that contain
-  // comments, so the comments can be carried through to generated code.
+  // Maps AST nodes (<descriptor-proto> et al) to sequences of <comment-token> that
+  // will be passed through to generated code.
   constant slot attached-comments = make(<table>);
-
-  // Previous non-whitespace, non-comment token. Initial use is to determine
-  // whether a comment is an end-of-line comment or not, by checking whether
-  // it has the same line as this token.
-  slot previous-token :: false-or(<token>) = #f;
 end class;
 
 define function peek-token
@@ -55,7 +50,11 @@ define function consume-token
                 | peek-token(parser)
                 | parse-error("unexpected end of input encountered");
   parser.peeked-token := #f;
-  parser.previous-token := token
+  // For side effect: read one more token so that the lexer attaches EOL comments to the
+  // correct token. If we're consuming a statement terminator we want the comments to be
+  // attached to the first token that started the line.
+  peek-token(parser);
+  token
 end function;
 
 define generic expect-token
@@ -102,19 +101,10 @@ end function;
 define function maybe-attach-comments-to
     (parser :: <parser>, descriptor :: <protocol-buffer-object>, token :: <token>)
   if (~empty?(token.token-comments))
-    let comments
-      = element(parser.attached-comments, descriptor, default: #f)
-          | make(<stretchy-vector>);
-    add!(comments, token);
-    parser.attached-comments[descriptor] := comments;
+    parser.attached-comments[descriptor]
+      := concat(element(parser.attached-comments, descriptor, default: #[]),
+                token.token-comments);
   end;
-end function;
-
-define function end-of-line-comment?
-    (parser :: <parser>, token :: <token>) => (eol? :: <bool>)
-  parser.previous-token
-    & instance?(token, <comment-token>)
-    & (parser.previous-token.token-line == token.token-line)
 end function;
 
 // Fills in the slots of `file-descriptor` based on the parse, but the
@@ -132,7 +122,9 @@ define function parse-file-stream
             := token.token-text;
           expect-token(parser, ";");
         #"package" =>
-          maybe-attach-comments-to(parser, file, token); // not quite right
+          // TODO: Attaching package comments to the file isn't quite right because they
+          // should be output next to the module definition.
+          maybe-attach-comments-to(parser, file, token);
           let package-name = parse-qualified-identifier(parser);
           file-descriptor-proto-package(file)
             := join(package-name, ".");
@@ -616,23 +608,7 @@ define function parse-message-field
            proto3-optional:
              label & label.token-text = "optional" & syntax = $syntax-proto3);
   options & (options.descriptor-parent := field);
-
-  // Check whether there's an end-of-line comment for this field and add it to
-  // the label or type token.
-  //
-  // An alternative would be to have the lexer save the first non-comment token
-  // on a line and attach the EOL comment to that, but I didn't think of it
-  // until now and since fields make up the bulk of the lines and EOL comments
-  // aren't that common it doesn't seem worth it, at least for now.
-  let eol-comment = peek-token(parser);
-  if (eol-comment & end-of-line-comment?(parser, eol-comment))
-    add!((label | type).token-comments, eol-comment);
-    // The lexer has already collected this comment so clear it or it will also
-    // be added as a full-line comment before the next field.
-    clear-comments(parser.%lexer);
-  end;
-  maybe-attach-comments-to(parser, field, label);
-  maybe-attach-comments-to(parser, field, type);
+  maybe-attach-comments-to(parser, field, label | type);
   field
 end function parse-message-field;
 

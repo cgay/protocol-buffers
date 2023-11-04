@@ -48,12 +48,15 @@ define test test-codegen-descriptor-pb ()
       end;
       lines
     end,
+    method comparable? (line)
+      // Ignore lines we added or generated.
+      ~find-substring(line, "added by hand")
+        & ~find-substring(line, "//     Date: ")
+        & ~find-substring(line, "/test-data/")
+    end,
     method diff (old, new)
-      let old-lines = choose(method (line)
-                               ~find-substring(line, "added by hand")
-                             end,
-                             read-lines(old));
-      let new-lines = read-lines(new);
+      let old-lines = choose(comparable?, read-lines(old));
+      let new-lines = choose(comparable?, read-lines(new));
       expect-equal(old-lines.size, new-lines.size); // keep going to find first mismatch
       for (old-line in old-lines,
            new-line in new-lines,

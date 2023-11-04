@@ -21,7 +21,18 @@ define class <token> (<object>)
   constant slot token-line   :: <int>,    required-init-keyword: line:;
   constant slot token-column :: <int>,    required-init-keyword: column:;
 
-  // <comment-token>s attached to (i.e., preceding) this token.
+  // Comment tokens that immediately preceded this token.  Note that end-of-line comment
+  // tokens are attached to the non-comment token at the beginning of their same line. In
+  // both cases, it is always the first non-comment token on a line that has any comments
+  // attached to it.
+  // TODO:
+  // * multi-line EOL comments drop all but the first line. From descriptor.proto:
+  //     SPEED = 1;         // Generate complete code for parsing, serialization,
+  //                        // etc.
+  //   The "// etc." is dropped, or attached to the following comment.
+  // * Comments for "reserved 9;" are dropped.
+  // * I'm sure there are other dropped comments.
+  // I suspect we need multi-token look-ahead to handle it correctly.
   slot token-comments :: <stretchy-vector> = make(<stretchy-vector>);
 end class;
 
@@ -74,6 +85,14 @@ define class <lexer> (<object>)
   slot lexer-line :: <int> = 1;
   slot lexer-column :: <int> = 0;
 
+  // The non-whitespace, non-comment token that started the current line.
+  // End-of-line comments are attached to this.
+  slot lexer-line-start-token :: false-or(<token>) = #f;
+
+  // Previous token of any kind, and not necessarily ever returned by read-token
+  // depending on the values of lexer-whitespace? and lexer-comments?.
+  slot lexer-previous-token :: false-or(<token>) = #f;
+
   // Solely for use in error messages.
   constant slot lexer-file :: <string> = "<stream>",
     init-keyword: file:;
@@ -86,7 +105,7 @@ define class <lexer> (<object>)
   constant slot lexer-comments? :: <bool> = #t,
     init-keyword: comments?:;
   // Sequence of consecutively returned comment tokens to be attached to the
-  // next non-comment token for output by the code generator.
+  // next non-comment token for eventual output by the code generator.
   slot lexer-comments :: <stretchy-vector> = make(<stretchy-vector>);
 end class;
 
@@ -165,17 +184,36 @@ end function;
 define method read-token
     (lex :: <lexer>) => (token :: false-or(<token>))
   dynamic-bind (*lexer* = lex)
-    let token = read-token-1(lex);
-    // Attach comments
-    if (instance?(token, <comment-token>))
-      add!(lex.lexer-comments, token);
-    elseif (token
-              & ~instance?(token, <whitespace-token>)
-              & ~empty?(lex.lexer-comments))
-      token.token-comments := lex.lexer-comments;
-      clear-comments(lex);
-    end;
-    token
+    iterate loop ()
+      let token = read-token-1(lex);
+      let prev = lex.lexer-previous-token;
+      lex.lexer-previous-token := token;
+      select (token by instance?)
+        <whitespace-token> =>
+          iff(lex.lexer-comments?, token, loop());
+        <comment-token> =>
+          // Attach comments to the token that follows them, except that EOL comments are
+          // attached to the most recent non-comment token that started a new line.
+          let start = lex.lexer-line-start-token;
+          if (start & (start.token-line == token.token-line))
+            add!(start.token-comments, token);
+          else
+            add!(lex.lexer-comments, token);
+          end;
+          iff(lex.lexer-comments?, token, loop());
+        <token> =>
+          if (~empty?(lex.lexer-comments))
+            token.token-comments := lex.lexer-comments;
+            clear-comments(lex);
+          end;
+          if (~prev | (prev.token-line ~== token.token-line))
+            lex.lexer-line-start-token := token
+          end;
+          token;
+        otherwise =>
+          #f;
+      end select
+    end iterate
   end
 end method;
 

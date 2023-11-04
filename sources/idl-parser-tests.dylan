@@ -151,3 +151,25 @@ define test test-parse-descriptor-dot-proto ()
   remove-all-keys!($descriptors); // other tests parse descriptor.proto too.
   assert-no-errors(parse-proto-file(test-data-file("descriptor.proto")));
 end test;
+
+// Verify that end-of-line comments attach to the appropriate descriptor.
+define test test-parser-attached-eol-comments ()
+  let parser = parser-for("""
+    message Attached {
+      // before
+      optional int32 foo = 3; // eol
+      // don't attach this
+    }
+    """);
+  let file = make(<file-descriptor-proto>,
+                  name: "test-attached-eol-comments.proto",
+                  syntax: "proto2");
+  let message-token = consume-token(parser);
+  let message = parse-message(parser, file, #("no-namespace"), message-token);
+  assert-true(message);
+  assert-equal(1, size(descriptor-proto-field(message)));
+  let field = descriptor-proto-field(message)[0];
+  assert-equal(1, size(parser.attached-comments));
+  assert-equal(#["// before", "// eol"],
+               map(token-text, parser.attached-comments[field]));
+end test;
