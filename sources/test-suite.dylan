@@ -25,13 +25,3 @@ define function test-data-file
     (filename :: <string>) => (locator :: <file-locator>)
   file-locator(test-data-directory(), filename)
 end function;
-
-define function parse-proto-file
-    (path :: <pathname>, #key library-name)
- => (file :: <file-descriptor-proto>, comments-map :: <table>)
-  let gen = make(<generator>,
-                 input-files: list(path),
-                 output-directory: test-temp-directory(),
-                 library-name: library-name | "my-library");
-  parse-file(gen, path)
-end function;

@@ -63,7 +63,7 @@ define function generate-dylan-code
     (gen :: <generator>)
   let file-set = gen.generator-file-set;
   for (file in gen.generator-input-files)
-    let (descriptor, comments-map) = parse-file(gen, file);
+    let (descriptor, comments-map) = parse-file(file);
     add!(file-descriptor-set-file(file-set), descriptor);
     // Copy descriptor-attached comments from parser to generator.
     for (tokens :: <seq> keyed-by desc in comments-map)
@@ -84,19 +84,6 @@ define function generate-dylan-code
     format-out("%s wrote %s\n", app-name(), library-file);
     force-out();
   end;
-end function;
-
-define function parse-file
-    (gen :: <generator>, file :: <file-locator>)
- => (descriptor :: <file-descriptor-proto>, comments :: <table>)
-  with-open-file (in-stream = file, direction: #"input")
-    let descriptor
-      = make(<file-descriptor-proto>, name: as(<string>, file));
-    let lexer = make(<lexer>, stream: in-stream, whitespace?: #f);
-    let parser = make(<parser>, lexer: lexer);
-    parse-file-stream(parser, descriptor);
-    values(descriptor, parser.attached-comments)
-  end
 end function;
 
 // Emit code for an object. Each emit method should end its output with \n.  Note that

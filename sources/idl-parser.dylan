@@ -101,9 +101,28 @@ define function maybe-attach-comments-to
   end;
 end function;
 
+define function parse-file
+    (file :: <file-locator>)
+ => (descriptor :: <file-descriptor-proto>, comments :: <table>)
+  with-open-file (in-stream = file, direction: #"input")
+    parse-file-stream(in-stream, as(<string>, file));
+  end
+end function;
+
+// Separated out for use by tests.
+define function parse-file-stream
+    (stream :: <stream>, name :: <string>)
+ => (descriptor :: <file-descriptor-proto>, comments :: <table>)
+    let descriptor = make(<file-descriptor-proto>, name: name);
+    let lexer = make(<lexer>, stream: stream, whitespace?: #f);
+    let parser = make(<parser>, lexer: lexer);
+    parse-file-descriptor(parser, descriptor);
+    values(descriptor, parser.attached-comments)
+end function;
+
 // Fills in the slots of `file-descriptor` based on the parse, but the
 // file-descriptor-proto-name slot is the responsibility of the caller.
-define function parse-file-stream
+define function parse-file-descriptor
     (parser :: <parser>, file :: <file-descriptor-proto>) => ()
   iterate loop (token = consume-token(parser))
     if (token)

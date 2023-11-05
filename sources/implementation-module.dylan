@@ -86,6 +86,7 @@ define module protocol-buffers-impl
     attached-comments,
     consume-token,
     parse-field-options,
+    parse-file,
     parse-file-stream,
     parse-file-descriptor,
     parse-message,
@@ -94,7 +95,6 @@ define module protocol-buffers-impl
     // Code generator
     <generator>,
     generate-dylan-code,
-    parse-file,
 
     // Utilities
     camel-to-kebob,

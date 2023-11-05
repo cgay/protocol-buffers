@@ -149,7 +149,7 @@ end test;
 
 define test test-parse-descriptor-dot-proto ()
   remove-all-keys!($descriptors); // other tests parse descriptor.proto too.
-  assert-no-errors(parse-proto-file(test-data-file("descriptor.proto")));
+  assert-no-errors(parse-file(test-data-file("descriptor.proto")));
 end test;
 
 // Verify that end-of-line comments attach to the appropriate descriptor.
