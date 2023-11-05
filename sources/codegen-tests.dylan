@@ -35,7 +35,10 @@ define test test-codegen-descriptor-pb ()
                  input-files: list(test-data-file("descriptor.proto")),
                  output-directory: tempdir,
                  library-name: #f);
-  generate-dylan-code(gen);
+  // Prevent doing output to stdout in the test.
+  dynamic-bind (*standard-output* = make(<string-stream>, direction: #"output"))
+    generate-dylan-code(gen);
+  end;
 
   local
     method read-lines (path)

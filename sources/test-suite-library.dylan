@@ -3,6 +3,7 @@ Module: dylan-user
 define library protocol-buffers-test-suite
   // Libraries from Open Dylan
   use big-integers;
+  use common-dylan, import: { threads };
   use generic-arithmetic;
   use io;
   use system;
@@ -32,7 +33,9 @@ define module protocol-buffers-test-suite
               <integer> => <big-int> };
   use locators;
   use print;
+  use standard-io;
   use streams;
+  use threads;
 
   // Modules from package dependencies
   use strings;
