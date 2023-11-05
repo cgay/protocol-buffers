@@ -61,15 +61,14 @@ end method;
 
 define method print-object
     (desc :: <field-descriptor-proto>, stream :: <stream>) => ()
-  let label = field-descriptor-proto-label(desc);
   let label
-    = label & select (label)
-                $field-descriptor-proto-label-label-optional => "optional ";
-                $field-descriptor-proto-label-label-required => "required ";
-                $field-descriptor-proto-label-label-repeated => "repeated ";
-                otherwise =>
-                  ""
-              end;
+    = select (field-descriptor-proto-label(desc))
+        $field-descriptor-proto-label-label-optional => "optional ";
+        $field-descriptor-proto-label-label-required => "required ";
+        $field-descriptor-proto-label-label-repeated => "repeated ";
+        otherwise =>
+          ""
+      end;
   printing-object (desc, stream)
     format(stream, "%s%s = %d",
            label,
