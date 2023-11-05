@@ -87,6 +87,7 @@ define module protocol-buffers-impl
     consume-token,
     parse-field-options,
     parse-file-stream,
+    parse-file-descriptor,
     parse-message,
     parse-uninterpreted-option-name,
 

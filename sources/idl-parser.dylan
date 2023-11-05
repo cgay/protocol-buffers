@@ -8,9 +8,6 @@ Synopsis: Ad-hoc parser for .proto Interface Definition Language
 // * https://protobuf.com/docs/language-spec#character-classes
 // * https://github.com/bufbuild/protocompile/blob/main/parser/
 
-// The parser (peek-token, consume-token, expect-token) never sees or cares about
-// whitespace.
-
 // TODO: 2_147_483_646 (2^31 - 2) for message set wire format
 define constant $max-field-number :: <int> = 536_870_911;
 
@@ -24,6 +21,12 @@ define function parse-error
 end function;
 
 define class <parser> (<object>)
+  // The lexer supplied to the parser should be configured to ignore whitespace and
+  // comments. The only time the parser cares about comments is when creating descriptor
+  // nodes, in order to associate comments with descriptors so they can be output by the
+  // code generator. It does this by explicitly looking at the comments associated with
+  // certain tokens. For example the parser associates <descriptor-proto>s with any
+  // comments attached to the "message" token.
   constant slot %lexer :: <lexer>, required-init-keyword: lexer:;
   slot peeked-token :: false-or(<token>) = #f;
 
@@ -84,18 +87,9 @@ define method expect-token (parser :: <parser>, strings :: <seq>) => (token :: <
   token
 end method;
 
-
-// Retrieve and discard tokens up to the next semicolon.
-define function discard-statement (parser :: <parser>) => (#rest tokens)
-  iterate loop (t = consume-token(parser), tokens = #())
-    if (t)
-      if (t.token-value == ';')
-        reverse!(tokens)
-      else
-        loop(consume-token(parser), pair(t, tokens))
-      end
-    end
-  end
+define function not-implemented
+    (what :: <string>, token :: <token>)
+  parse-error("%s not yet implemented (%=)", what, token);
 end function;
 
 define function maybe-attach-comments-to
@@ -143,7 +137,7 @@ define function parse-file-stream
           // Allow whitespace and comments to be ignored.
           if (~instance?(token, <comment-token>)
                 & ~instance?(token, <whitespace-token>))
-            parse-error("unexpected token: %s", token);
+            parse-error("unexpected token: %=", token);
           end;
       end select;
       peek-token(parser) & loop(consume-token(parser));
@@ -239,6 +233,7 @@ define function parse-message
   let syntax = file-descriptor-proto-syntax(file);
   let message = make(<descriptor-proto>, name: name);
   register-descriptor(join(reverse(name-path), "."), message);
+  let oneof-index = 0;
   block (done)
     while (#t)
       let token = consume-token(parser);
@@ -260,11 +255,13 @@ define function parse-message
           add-descriptor-proto-field
             (message, parse-message-field(parser, syntax, type: token));
         #"group" =>
-          discard-statement(parser); // TODO: parse-group(parser);
+          not-implemented("group (inside message)", token);
         #"oneof" =>
-          discard-statement(parser); // TODO: parse-oneof(parser);
+          add-descriptor-proto-oneof-decl
+            (message, parse-oneof(parser, message, name-path, token, oneof-index));
+          inc!(oneof-index);
         #"option" =>
-          ;  // not yet: add!(options, parse-message-option(parser));
+          not-implemented("message options", token);
         #"extensions" =>
           parse-extensions-spec(parser, message);
         #"reserved" =>
@@ -276,9 +273,8 @@ define function parse-message
           add-descriptor-proto-enum-type
             (message, parse-enum(parser, name-path, token));
         #"extend" =>
-          discard-statement(parser); // TODO: parse-extend(parser, message-names);
-        ';' =>                    // empty statement,
-          ;                       // do nothing
+          not-implemented("extend", token);
+        ';' => ;                // empty statement, do nothing
         '}' =>
           done();
         otherwise =>
@@ -294,7 +290,7 @@ define function parse-message
             <comment-token> =>
               #f;
             otherwise =>
-              parse-error("unexpected message element starting with %s", token);
+              parse-error("unexpected message element starting with %=", token);
           end;
       end select;
     end while;
@@ -352,6 +348,47 @@ define function validate-message
   end for;
 end function;
 
+// The "oneof" token has just been consumed. `message` is the containing message.
+define function parse-oneof
+    (parser :: <parser>, message :: <descriptor-proto>, parent-path :: <list>,
+     oneof-token :: <token>, oneof-index :: <int>)
+ => (oneof :: <oneof-descriptor-proto>)
+  let name-token = expect-token(parser, <identifier-token>);
+  let name = name-token.token-text;
+  let name-path = pair(name, parent-path);
+  expect-token(parser, "{");
+  let oneof = make(<oneof-descriptor-proto>, name: name);
+  register-descriptor(join(reverse(name-path), "."), oneof);
+  iterate loop (field-count = 0)
+    let token = consume-token(parser);
+    let text = token.token-text;
+    select (token.token-value)
+      #"option" =>
+        not-implemented("oneof options", token);
+        loop(field-count);
+      #"group" =>
+        not-implemented("group (inside oneof)", token);
+        loop(field-count + 1);
+      ';' =>                 // empty statement, do nothing
+        loop(field-count);
+      '}' =>
+        field-count > 0
+          | parse-error("oneof must have at least one field: %=", oneof-token);
+      otherwise =>
+        if (instance?(token, <identifier-token>))
+          let field = parse-message-field(parser, $syntax-proto3, type: token);
+          field-descriptor-proto-oneof-index(field) := oneof-index;
+          add-descriptor-proto-field(message, field);
+          loop(field-count + 1)
+        else
+          parse-error("unexpected oneof element starting with %=", token);
+        end;
+    end select;
+  end iterate;
+  maybe-attach-comments-to(parser, oneof, oneof-token);
+  oneof
+end function;
+
 // The "enum" token has just been consumed, at file level or nested in a message.
 define function parse-enum
     (parser :: <parser>, parent-names :: <list>, enum-token :: <token>)
@@ -366,9 +403,10 @@ define function parse-enum
       let token = consume-token(parser);
       select (token.token-value)
         #"option" =>
-          discard-statement(parser);
+          not-implemented("enum options", token);
         #"reserved" =>
-          discard-statement(parser);
+          not-implemented("enum reserved values", token);
+        ';' => ;                // empty statement, do nothing
         '}' =>
           done();
         otherwise =>
@@ -392,7 +430,7 @@ define function parse-enum-field
     (parser :: <parser>, name :: <token>)
  => (field :: <enum-value-descriptor-proto>)
   if (~instance?(name, <identifier-token>))
-    parse-error("unexpected token type %s", name);
+    parse-error("unexpected token type %=", name);
   end;
   // TODO: group is explicitly called out as reserved, but there must be others?
   if (name.token-text = "group")
@@ -506,10 +544,10 @@ define function parse-reserved-spec
               loop(consume-token(parser));
             end;
           otherwise =>
-            parse-error("unexpected token %s, want semicolon, comma or 'to'", punct);
+            parse-error("unexpected token %=, want semicolon, comma or 'to'", punct);
         end;
       otherwise =>
-        parse-error("unexpected token %s, want field name or number", token);
+        parse-error("unexpected token %=, want field name or number", token);
     end select
   end iterate
 end function;
@@ -522,7 +560,7 @@ define function parse-extensions-spec
     let value = token.token-value;
     if (value ~== ';')
       if (~instance?(token, <number-token>))
-        parse-error("unexpected token %s, want field number", token);
+        parse-error("unexpected token %=, want field number", token);
       end;
       if (~instance?(value, <int>)
             | value < 1
@@ -553,7 +591,7 @@ define function parse-extensions-spec
             loop(consume-token(parser));
           end;
         otherwise =>
-          parse-error("unexpected token %s, want ';', '[', \"to\", or ','.", punct);
+          parse-error("unexpected token %=, want ';', '[', \"to\", or ','.", punct);
       end select;
     end if;
   end iterate

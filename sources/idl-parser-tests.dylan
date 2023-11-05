@@ -173,3 +173,45 @@ define test test-parser-attached-eol-comments ()
   assert-equal(#["// before", "// eol"],
                map(token-text, parser.attached-comments[field]));
 end test;
+
+define test test-parse-oneof ()
+  let text = """
+    syntax = "proto2";
+    package abc;
+    message M1 {
+      optional int32 before = 1;
+      oneof oneof_x {
+        int32  iii = 2;
+        string sss = 3;
+        bool   bbb = 4;
+        // TODO: group ...
+      }
+      optional int32 after = 5;
+    }
+    """;
+  let parser = parser-for(text);
+  let file = make(<file-descriptor-proto>, name: "test-parse-oneof");
+  parse-file-descriptor(parser, file);
+  let m1 = find-descriptor("abc.M1");
+
+  // Verify the OneofDescriptorProto itself.
+  assert-equal(1, m1.descriptor-proto-oneof-decl.size);
+  let oneof-decl = m1.descriptor-proto-oneof-decl.first;
+  assert-equal("oneof_x", oneof-decl.oneof-descriptor-proto-name);
+  assert-false(oneof-decl.oneof-descriptor-proto-options);
+
+  // Verify the correct fields in M1, and the oneof indexes.
+  let fields = m1.descriptor-proto-field;
+  local method find-field (name)
+          find-element(fields,
+                       method (field)
+                         field.field-descriptor-proto-name = name
+                       end)
+        end;
+  assert-equal(5, fields.size);
+  assert-false(field-descriptor-proto-oneof-index(find-field("before")));
+  expect-equal(0, field-descriptor-proto-oneof-index(find-field("iii")));
+  expect-equal(0, field-descriptor-proto-oneof-index(find-field("sss")));
+  expect-equal(0, field-descriptor-proto-oneof-index(find-field("bbb")));
+  assert-false(field-descriptor-proto-oneof-index(find-field("after")));
+end test;
