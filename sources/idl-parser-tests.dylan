@@ -215,3 +215,9 @@ define test test-parse-oneof ()
   expect-equal(0, field-descriptor-proto-oneof-index(find-field("bbb")));
   assert-false(field-descriptor-proto-oneof-index(find-field("after")));
 end test;
+
+// Use '--progress all' to see the error from this.
+define test test-parse-google-unittest-proto
+    (expected-to-fail-reason: "parser incomplete")
+  assert-no-errors(parse-file(test-data-file("google/unittest.proto")));
+end test;
