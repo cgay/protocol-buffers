@@ -31,7 +31,8 @@ define module protocol-buffers-impl
   use strings;
   use threads,
     import: { dynamic-bind };
-  use uncommon-dylan;
+  use uncommon-dylan,
+    exclude: { format-out };
   use uncommon-utils;
 
   export
@@ -91,10 +92,6 @@ define module protocol-buffers-impl
     parse-file-descriptor,
     parse-message,
     parse-uninterpreted-option-name,
-
-    // Code generator
-    <generator>,
-    generate-dylan-code,
 
     // Utilities
     camel-to-kebob,

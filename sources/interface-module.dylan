@@ -22,5 +22,9 @@ define module protocol-buffers
     enum-value-to-name,
 
     // Types
-    <int32>, <uint32>, <int64>, <uint64>;
+    <int32>, <uint32>, <int64>, <uint64>,
+
+    // Code generator
+    <generator>,
+    generate-dylan-code;
 end module;
