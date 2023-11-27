@@ -60,7 +60,7 @@ end function;
 
 // Exported
 define function generate-dylan-code
-    (gen :: <generator>)
+    (gen :: <generator>) => (output-files :: <seq>)
   let file-set = gen.generator-file-set;
   for (file in gen.generator-input-files)
     let (descriptor, comments-map) = parse-file(file);
@@ -70,7 +70,7 @@ define function generate-dylan-code
       gen.attached-comments[desc] := tokens;
     end;
   end;
-  emit(gen, file-set);
+  let output-files :: <list> = emit(gen, file-set);
   let library-name = gen.generator-library-name;
   if (library-name)
     let output-dir = gen.generator-output-directory;
@@ -83,14 +83,17 @@ define function generate-dylan-code
     end;
     format-out("%s wrote %s\n", app-name(), library-file);
     force-out();
+    output-files := pair(library-file, output-files);
   end;
+  output-files
 end function;
 
 // Emit code for an object. Each emit method should end its output with \n.  Note that
 // some methods accept a parent: keyword argument. It is the fully-qualified Dylan name
 // of the parent, without any adornments like "$" or "<...>".
 define generic emit
-    (gen :: <generator>, object :: <protocol-buffer-object>, #key, #all-keys);
+    (gen :: <generator>, object :: <protocol-buffer-object>, #key, #all-keys)
+ => (#rest values);
 
 define function code
     (gen :: <generator>, format-string :: <string>, #rest args)
@@ -122,20 +125,31 @@ end function;
 
 define method emit
     (gen :: <generator>, file-set :: <file-descriptor-set>, #key)
+ => (output-files :: <seq>)
   // Emitting each file writes the -pb.dylan file directly, but also stores in
   // gen any names that should be exported. This way files that are in the same
   // protobuf "package" can later be emitted into a single -module-pb.dylan
   // file.
+
+  // Output files must be returned in the order in which they should be added
+  // to the Open Dylan project that contains the .spec file listing the .proto
+  // inputs. Library file, then module files, then the main generated code
+  // files.
+  let output-files = #();
   for (file in file-set.file-descriptor-set-file)
-    emit(gen, file)
+    let output-file = emit(gen, file);
+    output-files := pair(output-file, output-files);
   end;
   for (names keyed-by module-name in gen.exported-names)
-    emit-module-file(gen, module-name, names);
+    let output-file = emit-module-file(gen, module-name, names);
+    output-files := pair(output-file, output-files);
   end;
+  output-files
 end method;
 
 define function emit-module-file
     (gen :: <generator>, module-name :: <string>, names :: <seq>)
+ => (locator :: <file-locator>)
   let output-dir = gen.generator-output-directory;
   let module-file
     = file-locator(output-dir, concat(module-name, $generated-module-suffix));
@@ -152,6 +166,7 @@ define function emit-module-file
   end;
   format-out("%s wrote %s\n", app-name(), module-file);
   force-out();
+  module-file
 end function;
 
 
@@ -160,7 +175,9 @@ define thread variable *file-descriptor-proto* :: false-or(<file-descriptor-prot
 define thread variable *code-stream* :: false-or(<stream>) = #f;
 define thread variable *current-module* :: false-or(<string>) = #f;
 
-define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
+define method emit
+    (gen :: <generator>, file :: <file-descriptor-proto>, #key)
+ => (locator :: <file-locator>)
   let output-dir = gen.generator-output-directory;
   let absfile = as(<file-locator>, file.file-descriptor-proto-name);
   let output-file = file-locator(output-dir,
@@ -196,6 +213,7 @@ define method emit (gen :: <generator>, file :: <file-descriptor-proto>, #key)
   end with-open-file;
   format-out("%s wrote %s\n", app-name(), output-file);
   force-out();
+  output-file
 end method;
 
 // `parent` is provided if this is a nested message.
