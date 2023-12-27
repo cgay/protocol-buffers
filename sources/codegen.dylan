@@ -59,8 +59,14 @@ define function app-name ()
 end function;
 
 // Exported
+//
+// Generate Dylan code based on the given generator configuration.
+// Values:
+//   dylan-files: sequence of locators for generated Dylan code.
+//   lid-file: locator for generated LID file, #f if no library file generated.
 define function generate-dylan-code
-    (gen :: <generator>) => (output-files :: <seq>)
+    (gen :: <generator>)
+ => (dylan-files :: <seq>, lid-file :: false-or(<file-locator>))
   let file-set = gen.generator-file-set;
   for (file in gen.generator-input-files)
     let (descriptor, comments-map) = parse-file(file);
@@ -72,6 +78,7 @@ define function generate-dylan-code
   end;
   let output-files :: <list> = emit(gen, file-set);
   let library-name = gen.generator-library-name;
+  let lid-file = #f;
   if (library-name)
     let output-dir = gen.generator-output-directory;
     let library-file
@@ -79,13 +86,27 @@ define function generate-dylan-code
     with-open-file (stream = library-file,
                     direction: #"output",
                     if-exists: #"replace")
-      format(stream, $library-template, library-name, library-name);
+      let module-names = key-sequence(gen.exported-names);
+      format(stream, $library-template, library-name, library-name,
+             join(module-names, ",\n         "));
     end;
+    output-files := pair(library-file, output-files);
+    // TODO: output should be conditional. not all callers will want it.
     format-out("%s wrote %s\n", app-name(), library-file);
     force-out();
-    output-files := pair(library-file, output-files);
+
+    lid-file := file-locator(output-dir, concat(library-name, ".lid"));
+    with-open-file (stream = lid-file,
+                    direction: #"output",
+                    if-exists: #"replace")
+      format(stream, "Library: %s\nFiles: %s\n",
+             library-name,
+             join(output-files, "\n       ", key: curry(as, <string>)));
+    end;
+    format-out("%s wrote %s\n", app-name(), lid-file);
+    force-out();
   end;
-  output-files
+  values(output-files, lid-file)
 end function;
 
 // Emit code for an object. Each emit method should end its output with \n.  Note that
@@ -133,8 +154,7 @@ define method emit
 
   // Output files must be returned in the order in which they should be added
   // to the Open Dylan project that contains the .spec file listing the .proto
-  // inputs. Library file, then module files, then the main generated code
-  // files.
+  // inputs. Module files first, then the main generated code files.
   let output-files = #();
   for (file in file-set.file-descriptor-set-file)
     let output-file = emit(gen, file);
@@ -362,6 +382,8 @@ define constant $library-template
     define library %s
       use common-dylan;
       use protocol-buffers;
+
+      export %s;
     end library %s;
 
     """;
