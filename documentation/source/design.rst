@@ -37,7 +37,7 @@ Pro ``protoc``:
 
 Pro Dylan:
 
-* Parsing a ``.proto`` file isn't that hard anyway.
+* Parsing a ``.proto`` file isn't that hard anyway. (Famous last words.)
 
 * Easier integration with the build system. Integrating a Dylan program into
   the Dylan build system can be done in-language rather than by invoking an
@@ -51,7 +51,7 @@ Pro Dylan:
   over time won't be very difficult anyway. It's hard to imagine protobufs
   suddenly changing in some fundamental way that would require a rewrite.
 
-* We, and our users, can remain in our blissful non-C++ world.
+* The big one: We, and our users, can remain in our blissful non-C++ world.
 
 Implementation Strategy
 =======================
@@ -79,27 +79,20 @@ The following are roughly in order of which should be done first.
 
 * Write IDL parser.
 
-  **Status:** Aug 2023, lexer complete, parser underway.
+  **Status:** Dec 2023, lexer complete, parser good enough to parse descriptor.proto
+  but still only perhaps 50% done.
 
 * Write code generator.
 
-  Write an example of the expected protoc generated code, by hand. This will
-  help to tease out the generated code APIs.
+  **Status:** Dec 2023, can generate code for descriptor.proto
 
-  * option (dylan_module) = "foo";           // default to what?
-  * option (dylan_gen_module_file) = false;  // default to true
-  * option (dylan_gen_library_file) = false; // default to true
-
-  **Status:** (Aug 2023) I wrote much of a hand translated version of
-  descriptor.proto and now I have almost enough to use it in the parser code.
-
-* Write gRPC implementation and hook it into HTTP server.
-
-* Build system integration. LID file option to invoke protoc:
+* **Done:** Build system integration. LID file option to invoke protoc:
 
      protocol-buffer: foo.proto -> foo-module.dylan, foo-library.dylan?
 
 * Write Text Format parser/printer
+
+* Write gRPC implementation and hook it into HTTP server.
 
 * Arenas to reduce memory churn
 
@@ -110,6 +103,10 @@ The following are roughly in order of which should be done first.
   if they need to be used with arenas) or ``required-init-keyword:``?  Are
   there safe ways to add behavior to protoc-generated classes in Dylan?
 
+  **Status:** Dec 2023, it's now possible to build protos *into* a Dylan
+  library and therefore non-generated code can add methods to sealed generic
+  functions if it wants to. This should make it possible to, for example, make
+  a subclass of a generated class that modifies the API of the generated code.
 
 TODO List
 =========
@@ -118,26 +115,14 @@ Some specific reminders to myself as I go along.
 
 * Lazy decoding
 
-* Need to handle the few Dylan reserved words specially if they're used as a
-  message field name etc. Also any macros imported into the generated code's
-  module. Providing a dylan_name field option isn't enough because sometimes
-  you need to interact with a .proto that you cannot modify. "end" is a common
-  example.
-
-  **Status:** Not a problem. Generated slot names all have the class (i.e.,
-  message) name as a prefix.
-
 * limited types for repeated slots. First pass, add a comment about
   the type, like "// repeated int32"
 
 * Emit explicit "define generic" forms with the correct type unions.  It will
   complicate the codegen somewhat. How much of a win is it, if the generated
   code is sealed anyway? I think the IDE / LSP will emit a more specific
-  arglist, for example.
-
-* for now this code assumes the existence of certain base classes. These
-  will be defined elsewhere and will need to be imported with a prefix so
-  as not to conflict with generated class names.
+  arglist, for example, but since all accessors use the class name as a prefix
+  they're not particularly "generic" generic functions.
 
 * strings should be utf-8. proto3 validates that in setter methods.
 
