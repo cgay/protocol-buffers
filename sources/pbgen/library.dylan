@@ -3,20 +3,19 @@ Synopsis: Generate Dylan code from a .proto file
 
 define library pbgen
   use command-line-parser;
-  use common-dylan;
-  use io;
+  use common-dylan, exclude: { simple-format };
+  use io, import: { format-out, streams };
   use protocol-buffers;
   use system;
-  use uncommon-dylan;
 end library;
 
 define module pbgen
   use command-line-parser;
+  use common-dylan;
   use file-system;
   use format-out;
   use google-protobuf;
   use locators;
-  use protocol-buffers-impl;
+  use protocol-buffers;
   use streams;
-  use uncommon-dylan;
 end module;
