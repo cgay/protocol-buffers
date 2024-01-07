@@ -79,6 +79,9 @@ generated in its own library.
    generated Dylan protobuf APIs will immediately know it's a protobuf
    generated library and will know what to expect from that library.
 
+   If there is no ``Library:`` specified then no "library.dylan" or
+   "foo-pb.lid" file is generated. See `Generate Only Dylan Modules`_, below.
+
    ``Directory:`` specifies the directory in which to write the generated
    files, relative to the ``.spec`` file's directory. If not specified, the
    files are generated in the ``.spec`` file's directory.
@@ -126,7 +129,7 @@ Generate Only Dylan Modules
 ---------------------------
 
 The second way to incorporate protobufs into your project is to generate Dylan
-modules and code that are added to your library directly. The primary reason do
+modules and code that are added to your library directly. The primary reason to
 do it this way, instead of generating a separate library, is if you need to
 augment the generated protobuf classes in some way.
 
