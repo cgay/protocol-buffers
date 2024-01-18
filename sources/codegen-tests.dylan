@@ -52,10 +52,10 @@ define test test-codegen-descriptor-pb ()
       lines
     end,
     method comparable? (line)
-      // Ignore lines we added or generated.
+      // Ignore lines we added by hand.
       ~find-substring(line, "added by hand")
         & ~find-substring(line, "//     Date: ")
-        & ~find-substring(line, "/test-data/")
+        & ~find-substring(line, "test-data/")
     end,
     method diff (old, new)
       let old-lines = choose(comparable?, read-lines(old));

@@ -7,8 +7,8 @@ define module protocol-buffers
     $max-field-number,
 
     <protocol-buffer-error>,
-    <protocol-buffer-message>,
     <protocol-buffer-object>,
+      <protocol-buffer-message>,
 
     descriptor-name,
     find-descriptor,
@@ -26,5 +26,11 @@ define module protocol-buffers
 
     // Code generator
     <generator>,
-    generate-dylan-code;
+    generate-dylan-code,
+
+    // For use by generated code. (TODO: define separate module for these.)
+    set-introspection-data,
+
+    // Introspection API
+    introspect;
 end module;

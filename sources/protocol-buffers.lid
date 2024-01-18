@@ -4,10 +4,10 @@ Files: library.dylan
        google-protobuf-module-pb.dylan
        implementation-module.dylan
        64-bit.dylan
-       types.dylan
-       descriptor-pb.dylan
-       descriptor.dylan
        utilities.dylan
+       descriptor-support.dylan
+       descriptor-pb.dylan
+       descriptor-extras.dylan
        wire-format.dylan
        idl-lexer.dylan
        idl-parser.dylan

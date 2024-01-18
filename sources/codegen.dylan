@@ -7,16 +7,19 @@ Synopsis: Invoke the parser on a set of files and then
 //
 // * Output the proto IDL name at the beginning and end of the Dylan code for it.
 //
-// * Output the proto IDL comments in the appropriate place.
-//
 // * The package decl may appear anywhere in the file except before the syntax
 //   decl. Test that this works.
 //
-// * Generate add-* functions for repeated fields. They will create the
-//   sequence if not done yet, and we can type the field as <seq> even if using
-//   <stretchy-vector> internally.
-//
 // * There is no way to detect whether a bool field is set. See dylan-slot-type.
+
+// Emit code for an object. Each emit method should end its output with \n.  Some methods
+// accept dylan-parent: and/or proto-parent: keyword arguments. Both represent the name
+// of the entity being emitted, but one is the Dylan name for it (without any adornments
+// like "$" or "<...>") and the other is the fully-qualified protobuf name for it.
+define generic emit-code
+    (gen :: <generator>, object :: <protocol-buffer-object>, #key, #all-keys)
+ => (#rest values);
+
 
 // I kind of prefer ".pb.dylan", for unexplainable aesthetic reasons, but
 // https://github.com/dylan-lang/opendylan/issues/1529 needs fixing first.
@@ -60,7 +63,10 @@ end function;
 
 // Exported
 //
-// Generate Dylan code based on the given generator configuration.
+// Generate Dylan code based on the given generator configuration. In general,
+// for each input file foo.proto writes foo-pb.dylan, plus for each package a
+// {pkg}-module-pb.dylan for each distinct protobuf package.
+//
 // Values:
 //   dylan-files: sequence of locators for generated Dylan code.
 //   lid-file: locator for generated LID file, #f if no library file generated.
@@ -76,7 +82,7 @@ define function generate-dylan-code
       gen.attached-comments[desc] := tokens;
     end;
   end;
-  let output-files :: <list> = emit(gen, file-set);
+  let output-files :: <list> = emit-code(gen, file-set);
   let library-name = gen.generator-library-name;
   let lid-file = #f;
   if (library-name)
@@ -109,13 +115,6 @@ define function generate-dylan-code
   values(output-files, lid-file)
 end function;
 
-// Emit code for an object. Each emit method should end its output with \n.  Note that
-// some methods accept a parent: keyword argument. It is the fully-qualified Dylan name
-// of the parent, without any adornments like "$" or "<...>".
-define generic emit
-    (gen :: <generator>, object :: <protocol-buffer-object>, #key, #all-keys)
- => (#rest values);
-
 define function code
     (gen :: <generator>, format-string :: <string>, #rest args)
   apply(format, *code-stream*, format-string, args);
@@ -144,7 +143,7 @@ end function;
 
 
 
-define method emit
+define method emit-code
     (gen :: <generator>, file-set :: <file-descriptor-set>, #key)
  => (output-files :: <seq>)
   // Emitting each file writes the -pb.dylan file directly, but also stores in
@@ -157,7 +156,7 @@ define method emit
   // inputs. Module files first, then the main generated code files.
   let output-files = #();
   for (file in file-set.file-descriptor-set-file)
-    let output-file = emit(gen, file);
+    let output-file = emit-code(gen, file);
     output-files := pair(output-file, output-files);
   end;
   for (names keyed-by module-name in gen.exported-names)
@@ -195,7 +194,7 @@ define thread variable *file-descriptor-proto* :: false-or(<file-descriptor-prot
 define thread variable *code-stream* :: false-or(<stream>) = #f;
 define thread variable *current-module* :: false-or(<string>) = #f;
 
-define method emit
+define method emit-code
     (gen :: <generator>, file :: <file-descriptor-proto>, #key)
  => (locator :: <file-locator>)
   let output-dir = gen.generator-output-directory;
@@ -223,11 +222,28 @@ define method emit
            file.file-descriptor-proto-name,
            as-iso8601-string(current-date()));
       emit-comments(gen, file);
-      for (enum in file-descriptor-proto-enum-type(file) | #[])
-        emit(gen, enum);
+      for (enum in file.file-descriptor-proto-enum-type | #[])
+        emit-code(gen, enum);
+      end;
+      for (message in file.file-descriptor-proto-message-type | #[])
+        emit-code(gen, message);
+      end;
+
+      code(gen, """
+           //
+           // Introspection
+           //
+
+
+           """);
+      // Introspection code must be emitted last so that it doesn't make illegal
+      // forward reference to constants from enum's nested inside messages.
+      let package-name = file.file-descriptor-proto-package;
+      for (enum in file.file-descriptor-proto-enum-type | #[])
+        emit-introspection-code(gen, enum, proto-parent: package-name);
       end;
       for (message in file-descriptor-proto-message-type(file) | #[])
-        emit(gen, message);
+        emit-introspection-code(gen, message, proto-parent: package-name);
       end;
     end dynamic-bind;
   end with-open-file;
@@ -237,8 +253,7 @@ define method emit
 end method;
 
 // `parent` is provided if this is a nested message.
-define method emit (gen :: <generator>, message :: <descriptor-proto>,
-                    #key parent)
+define method emit-code (gen :: <generator>, message :: <descriptor-proto>, #key parent)
   let camel-name = descriptor-proto-name(message);
   let full-name = dylan-name(camel-name, parent: parent);
   let class-name = concat("<", full-name, ">");
@@ -253,7 +268,7 @@ define method emit (gen :: <generator>, message :: <descriptor-proto>,
 
        """, class-name);
   for (field in descriptor-proto-field(message) | #[])
-    let thunk = emit(gen, field, message: message, message-name: full-name);
+    let thunk = emit-code(gen, field, message: message, parent: full-name);
     if (thunk)
       add!(after-class-def, thunk);
     end;
@@ -269,21 +284,115 @@ define method emit (gen :: <generator>, message :: <descriptor-proto>,
   end;
 
   for (enum in descriptor-proto-enum-type(message) | #[])
-    emit(gen, enum, parent: full-name);
+    emit-code(gen, enum, parent: full-name);
   end;
   for (message in descriptor-proto-nested-type(message) | #[])
-    emit(gen, message, parent: full-name);
+    emit-code(gen, message, parent: full-name);
   end;
   for (oneof in descriptor-proto-oneof-decl(message) | #[])
-    emit(gen, oneof, parent: full-name);
+    emit-code(gen, oneof, parent: full-name);
   end;
 end method;
 
-define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
-                    #key message :: <descriptor-proto>, message-name :: <string>)
-  let camel-name = field-descriptor-proto-name(field);
-  let local-name = dylan-name(camel-name);
-  let getter = dylan-name(camel-name, parent: message-name);
+define method emit-introspection-code
+    (gen :: <generator>, enum :: <enum-descriptor-proto>,
+     #key proto-parent :: false-or(<string>),
+          dylan-parent :: false-or(<string>))
+  // TODO
+end method;
+
+define method emit-introspection-code
+    (gen :: <generator>, message :: <descriptor-proto>,
+     #key proto-parent :: false-or(<string>),
+          dylan-parent :: false-or(<string>))
+  let camel-name = message.descriptor-proto-name;
+  let proto-name = iff(proto-parent,
+                       concat(proto-parent, ".", camel-name),
+                       camel-name); // No package declaration.
+  let dylan-full-name = dylan-name(camel-name, parent: dylan-parent);
+
+  // Depth first
+  for (enum in message.descriptor-proto-enum-type | #[])
+    emit-introspection-code(gen, enum,
+                            proto-parent: proto-name,
+                            dylan-parent: dylan-full-name);
+  end;
+  for (msg in message.descriptor-proto-nested-type | #[])
+    emit-introspection-code(gen, msg,
+                            proto-parent: proto-name,
+                            dylan-parent: dylan-full-name);
+  end;
+
+  code(gen,
+       """
+       begin // introspection data for %s
+         let fields = make(<stretchy-vector>);
+         let m = make(<descriptor-proto>,
+                      name: %=,
+                      field: fields);
+         set-introspection-data(<%s>, m);
+         set-introspection-data(%=, m);
+
+       """,
+       proto-name, camel-name, dylan-full-name, proto-name);
+  // TODO: the rest of the message fields, e.g. nested types
+  // TODO: output functions and then call them. it makes better backtrace on failure.
+  for (field in message.descriptor-proto-field,
+       i from 0)
+    let field-name = field.field-descriptor-proto-name;
+    let getter = dylan-name(field-name, parent: dylan-full-name);
+    let optvar = sformat("f%dopt", i);
+    let field-proto-name = concat(proto-name, ".", field-name);
+    code(gen,
+         """
+           let %s = make(<field-options>); // TODO: ...set field options...
+           let f
+             = make(<field-descriptor-proto>,
+                    name: %=,
+                    number: %d,
+                    label: %s,
+                    type: %s,
+                    type-name: %=,
+                    extendee: %=,
+                    default-value: %=,
+                    oneof-index: %=,
+                    json-name: %=,
+                    proto3-optional: %=,
+                    options: %s);
+           add!(fields, f);
+           set-introspection-data(%s, f);
+           set-introspection-data(%s-setter, f);
+           set-introspection-data(%=, f);
+
+         """,
+         optvar,
+         field.field-descriptor-proto-name,
+         field.field-descriptor-proto-number,
+         select (field.field-descriptor-proto-label)
+           $field-descriptor-proto-label-label-repeated => "$field-descriptor-proto-label-label-repeated";
+           $field-descriptor-proto-label-label-optional => "$field-descriptor-proto-label-label-optional";
+           $field-descriptor-proto-label-label-required => "$field-descriptor-proto-label-label-required";
+           otherwise => "#f";
+         end,
+         field.field-descriptor-proto-type,  // fixme
+         field.field-descriptor-proto-type-name,
+         field.field-descriptor-proto-extendee,
+         field.field-descriptor-proto-default-value,
+         field.field-descriptor-proto-oneof-index,
+         field.field-descriptor-proto-json-name, // fixme camelCasify
+         field.field-descriptor-proto-proto3-optional,
+         optvar, getter, getter, field-proto-name);
+  end for;
+  code(gen, "end;\n\n");
+end method emit-introspection-code;
+
+define method emit-code
+    (gen :: <generator>, field :: <field-descriptor-proto>,
+     #key message :: <descriptor-proto>,
+          parent :: <string>)
+  let camel-name = field.field-descriptor-proto-name;
+  let init-keyword = dylan-name(camel-name);
+  let getter = dylan-name(camel-name, parent: parent);
   let (dylan-type-name :: <string>,
        default-for-type :: <string>,
        base-type)
@@ -298,9 +407,8 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
            init-keyword: %s:;
 
        """,
-       getter, dylan-type-name, default-for-type, local-name);
-  if (field.field-descriptor-proto-label
-        = $field-descriptor-proto-label-label-repeated)
+       getter, dylan-type-name, default-for-type, init-keyword);
+  if (field.field-descriptor-proto-label == $field-descriptor-proto-label-label-repeated)
     // Repeated fields get an add-* method.
     method ()
       export(gen, concat("add-", getter));
@@ -319,14 +427,13 @@ define method emit (gen :: <generator>, field :: <field-descriptor-proto>,
 
 
            """,
-           getter, message-name, base-type, base-type, getter,
+           getter, parent, base-type, base-type, getter,
            getter, getter);
     end
   end
 end method;
 
-define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
-                    #key parent)
+define method emit-code (gen :: <generator>, enum :: <enum-descriptor-proto>, #key parent)
   let camel-name = enum-descriptor-proto-name(enum);
   let local-name = dylan-name(camel-name);
   let full-name = dylan-name(camel-name, parent: parent);
@@ -343,14 +450,13 @@ define method emit (gen :: <generator>, enum :: <enum-descriptor-proto>,
 
        """, class-name);
   for (enum-value in enum-descriptor-proto-value(enum) | #[])
-    emit(gen, enum-value, parent: full-name)
+    emit-code(gen, enum-value, parent: full-name)
   end;
   code(gen, "\n");
 end method;
 
-define method emit
-    (gen :: <generator>, enum-value :: <enum-value-descriptor-proto>,
-     #key parent :: <string>)
+define method emit-code (gen :: <generator>, enum-value :: <enum-value-descriptor-proto>,
+                         #key parent :: <string>)
   let camel-name = enum-value-descriptor-proto-name(enum-value);
   let constant-name = concat("$", dylan-name(camel-name, parent: parent));
   let value = enum-value-descriptor-proto-number(enum-value);
@@ -367,8 +473,8 @@ define method emit
        constant-name, parent, parent, camel-name, value);
 end method;
 
-define method emit (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
-                    #key parent)
+define method emit-code (gen :: <generator>, oneof :: <oneof-descriptor-proto>,
+                         #key parent)
   emit-comments(gen, oneof);
   // TODO
   let name = dylan-name(oneof-descriptor-proto-name(oneof), parent: parent);

@@ -1,4 +1,6 @@
 Module: protocol-buffers-impl
+Synopsis: Support for the protobuf generated code. Base classes, introspection support, etc.
+
 
 // The root of the type hierarchy for generated code objects.
 define sealed abstract class <protocol-buffer-object> (<object>)
@@ -16,6 +18,14 @@ define sealed abstract class <protocol-buffer-object> (<object>)
   slot descriptor-parent :: false-or(<protocol-buffer-object>) = #f,
     init-keyword: parent:;
 end class;
+
+/* TODO:
+define class <protocol-buffer-package> (<protocol-buffer-object>)
+  constant slot package-bindings = make(<string-table>);
+
+  // TODO: store package-level options
+end class;
+*/
 
 // Returns the original proto IDL name (in camelCase and not the
 // fully-qualified name) of a descriptor.  This just makes it so we don't have
@@ -152,3 +162,54 @@ end enum;
 
 // A type to clarify when something is used as an index into a sequence.
 define constant <index> = <uint64>;
+
+
+//
+// Introspection
+//
+
+// Maps generated descriptor classes and their getter and setter functions to
+// descriptor objects. For example,
+//   * <my-enum>       => instance of <enum-descriptor-proto>
+//   * <my-message>    => instance of <descriptor-proto>
+//   * my-field        => instance of <field-descriptor-proto>
+//   * my-field-setter => instance of <field-descriptor-proto>
+//   * $my-enum-constant => instance of <enum-descriptor-proto>
+define constant $dylan-to-descriptor = make(<table>);
+
+// Maps fully-qualified name to <protocol-buffer-object>.
+define constant $name-to-descriptor = make(<string-table>);
+
+define function set-introspection-data
+    (key, value :: <protocol-buffer-object>) => ()
+  let t = iff(instance?(key, <string>),
+              $name-to-descriptor,
+              $dylan-to-descriptor);
+  let old = element(t, key, default: #f);
+  if (old)
+    pb-error("attempt to store %= under the key %= which already points to %=",
+             value, key, old);
+  end;
+  t[key] := value;
+end function;
+
+// Lookup introspection data for `key`, which may be a field getter/setter
+// function, a message class, an enum class, an enum constant, or the
+// fully-qualified name of any protobuf entity. (No leading '.' allowed.)
+define generic introspect
+    (key) => (desc :: false-or(<protocol-buffer-object>));
+
+define method introspect
+    (key :: <object>) => (desc :: false-or(<protocol-buffer-object>))
+  element($dylan-to-descriptor, key, default: #f)
+end method;
+
+define method introspect
+    (fully-qualified-name :: <string>)
+ => (desc :: false-or(<protocol-buffer-object>))
+  if (empty?(fully-qualified-name))
+    pb-error("the empty string does not name any protocol buffer entity");
+  end;
+  // TODO: if fully-qualified-name names a package, return a package object.
+  element($name-to-descriptor, fully-qualified-name, default: #f)
+end method;
