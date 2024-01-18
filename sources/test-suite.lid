@@ -6,6 +6,7 @@ Files: test-suite-library.dylan
        idl-lexer-tests.dylan
        idl-parser-tests.dylan
        codegen-tests.dylan
-       descriptor-tests.dylan
+       descriptor-support-tests.dylan
+       descriptor-extras-tests.dylan
        api-tests.dylan
        test-suite-main.dylan

@@ -1,4 +1,6 @@
 Module: protocol-buffers-impl
+Synopsis: Support for the protobuf generated code. Base classes, introspection support, etc.
+
 
 // The root of the type hierarchy for generated code objects.
 define sealed abstract class <protocol-buffer-object> (<object>)
@@ -16,6 +18,14 @@ define sealed abstract class <protocol-buffer-object> (<object>)
   slot descriptor-parent :: false-or(<protocol-buffer-object>) = #f,
     init-keyword: parent:;
 end class;
+
+/* TODO:
+define class <protocol-buffer-package> (<protocol-buffer-object>)
+  constant slot package-bindings = make(<string-table>);
+
+  // TODO: store package-level options
+end class;
+*/
 
 // Returns the original proto IDL name (in camelCase and not the
 // fully-qualified name) of a descriptor.  This just makes it so we don't have
@@ -152,3 +162,96 @@ end enum;
 
 // A type to clarify when something is used as an index into a sequence.
 define constant <index> = <uint64>;
+
+
+//
+// Introspection
+//
+
+define class <introspection-data> (<object>)
+  constant slot introspection-full-name :: <string>,
+    required-init-keyword: full-name:;
+  constant slot introspection-descriptor :: <protocol-buffer-object>,
+    required-init-keyword: descriptor:;
+  // This is a class for messages and enums but #f for fields.
+  constant slot introspection-class :: false-or(<class>) = #f,
+    init-keyword: class:;
+end class;
+
+define class <field-introspection-data> (<introspection-data>)
+  constant slot introspection-getter :: <func>,
+    required-init-keyword: getter:;
+  constant slot introspection-setter :: <func>,
+    required-init-keyword: setter:;
+  constant slot introspection-adder :: false-or(<func>) = #f,
+    init-keyword: adder:;
+end class;
+
+define constant $introspection-data = make(<table>);
+
+// Maps fully-qualified name to an <introspection-data> instance.
+define constant $introspection-data-by-name = make(<string-table>);
+
+// TODO: back compat...remove after updating generated code.
+define function set-introspection-data
+    (desc :: <protocol-buffer-object>, name :: <string>, key, #rest keys) => ()
+  apply(store, name, desc, key, keys);
+end function;
+
+// Called by generated code.  If you change this you'll want to create a
+// backward compatibility function which you can remove after regenerating
+// descriptor-pb.dylan and before comitting your changes. The name "store" and
+// the #rest args are to keep the generated code somewhat concise.
+define function store
+    (name :: <string>, desc :: <protocol-buffer-object>, #rest args) => ()
+  let (one, two, three) = apply(values, args);
+  let idata
+    = select (one by instance?)
+        <class> =>
+          // message or enum class
+          make(<introspection-data>,
+               full-name: name, descriptor: desc, class: one);
+        <protocol-buffer-enum> =>
+          // enum value
+          make(<introspection-data>,
+               full-name: name, descriptor: desc, class: object-class(one));
+        <func> =>
+          make(<field-introspection-data>,
+               full-name: name, descriptor: desc,
+               getter: one, setter: two, adder: three);
+        otherwise =>
+          pb-error("protobuf bug: bad introspection data for store(%=, %=, %=, ...)",
+                   name, desc, one);
+      end;
+  for (object in list(name, desc, one, two, three))
+    if (object)
+      let table = iff(instance?(object, <string>),
+                      $introspection-data-by-name,
+                      $introspection-data);
+      let old = element(table, object, default: #f);
+      // Remove this check once introspection code is complete...
+      old & pb-error("protobuf bug: attempt to store duplicate introspection data for %=",
+                     old.introspection-full-name);
+      table[object] := idata;
+    end;
+  end;
+end function;
+
+// Lookup introspection data for `key`, which may be a field getter/setter
+// function, a message class, an enum class, an enum constant, or the
+// fully-qualified name of any protobuf entity. (No leading '.' allowed.)
+define generic introspect
+    (key) => (i :: false-or(<introspection-data>));
+
+define method introspect
+    (key :: <object>) => (i :: false-or(<introspection-data>))
+  element($introspection-data, key, default: #f)
+end method;
+
+define method introspect
+    (fully-qualified-name :: <string>) => (i :: false-or(<introspection-data>))
+  if (empty?(fully-qualified-name))
+    pb-error("the empty string does not name any protocol buffer entity");
+  end;
+  element($introspection-data-by-name, fully-qualified-name, default: #f)
+end method;

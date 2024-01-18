@@ -1,6 +1,6 @@
 Module: dylan-user
 
-// This module is defined in a separate file so that it can depend on the
+// These modules are defined in a separate file so that they can depend on the
 // google-protobuf module that is part of the generated code. That is, the
 // google-protobuf module definition must be in a separate (generated) file and
 // must precede this file in the LID.
@@ -79,7 +79,7 @@ define module protocol-buffers-impl
     token-text,
     token-value,
 
-    // Parser
+    // IDL parser
     $syntax-proto2,
     $syntax-proto3,
     <parse-error>,

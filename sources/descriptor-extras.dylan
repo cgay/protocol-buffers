@@ -2,6 +2,12 @@ Module: google-protobuf
 Synopsis: Additional behavior for classes generated from descriptor.proto.
 
 
+// TODO: I think it was a mistake to define this code in the google-protobuf
+// module. There's no reason it can't be defined in protocol-buffers-impl
+// instead and exported from protocol-buffers, and keep the generated module
+// free of manual modifications.
+
+
 //
 // descriptor-name
 //
