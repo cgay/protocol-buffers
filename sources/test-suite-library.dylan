@@ -13,6 +13,9 @@ define library protocol-buffers-test-suite
   use strings;
   use testworks;
   use uncommon-dylan;
+
+  // Protobuf test data libraries
+  use nesting;
 end library;
 
 define module protocol-buffers-test-suite
@@ -41,4 +44,7 @@ define module protocol-buffers-test-suite
   use strings;
   use testworks;
   use uncommon-dylan;
+
+  // Protobuf test data libraries
+  use nesting, prefix: "nesting/";
 end module;

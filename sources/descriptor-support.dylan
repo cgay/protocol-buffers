@@ -1,5 +1,9 @@
 Module: protocol-buffers-impl
-Synopsis: Support for the protobuf generated code. Base classes, introspection support, etc.
+
+
+// This file for code that descriptor-pb.dylan depends on, so it precedes
+// descriptor-pb.dylan in the LID file. Put descriptor-related code that needs
+// to depend on descriptor-pb.dylan in descriptor-extras.dylan instead.
 
 
 // The root of the type hierarchy for generated code objects.
@@ -140,26 +144,6 @@ end function;
 // Misc
 //
 
-// A set of constants to identify the scalar types defined in the protobuf
-// spec.  https://developers.google.com/protocol-buffers/docs/proto3#scalar
-define enum <scalar-type> ()
-  $bool;
-  $bytes;
-  $double;
-  $fixed32;
-  $fixed64;
-  $float;
-  $int32;
-  $int64;
-  $sfixed32;
-  $sfixed64;
-  $sint32;
-  $sint64;
-  $string;
-  $uint32;
-  $uint64;
-end enum;
-
 // A type to clarify when something is used as an index into a sequence.
 define constant <index> = <uint64>;
 
@@ -204,15 +188,22 @@ define function store
         <class> =>
           // message or enum class
           make(<introspection-data>,
-               full-name: name, descriptor: desc, class: one);
+               full-name: name,
+               descriptor: desc,
+               class: one);
         <protocol-buffer-enum> =>
           // enum value
           make(<introspection-data>,
-               full-name: name, descriptor: desc, class: object-class(one));
+               full-name: name,
+               descriptor: desc,
+               class: object-class(one));
         <func> =>
           make(<field-introspection-data>,
-               full-name: name, descriptor: desc,
-               getter: one, setter: two, adder: three);
+               full-name: name,
+               descriptor: desc,
+               getter: one,
+               setter: two,
+               adder: three);
         otherwise =>
           pb-error("protobuf bug: bad introspection data for store(%=, %=, %=, ...)",
                    name, desc, one);

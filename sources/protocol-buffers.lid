@@ -12,6 +12,7 @@ Files: library.dylan
        wire-format.dylan
        idl-lexer.dylan
        idl-parser.dylan
+       text-format.dylan
        api.dylan
        codegen.dylan
 Platforms: x86_64-darwin
