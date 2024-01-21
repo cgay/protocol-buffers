@@ -5,6 +5,7 @@ Files: test-suite-library.dylan
        wire-format-tests.dylan
        idl-lexer-tests.dylan
        idl-parser-tests.dylan
+       text-format-tests.dylan
        codegen-tests.dylan
        descriptor-support-tests.dylan
        descriptor-extras-tests.dylan

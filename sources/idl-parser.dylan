@@ -49,15 +49,22 @@ end function;
 
 define function consume-token
     (parser :: <parser>) => (token :: <token>)
-  let token = parser.peeked-token
-                | peek-token(parser)
-                | parse-error("unexpected end of input encountered");
+  let token = peek-token(parser)
+    | parse-error("unexpected end of input encountered");
   parser.peeked-token := #f;
   // For side effect: read one more token so that the lexer attaches EOL comments to the
   // correct token. If we're consuming a statement terminator we want the comments to be
   // attached to the first token that started the line.
   peek-token(parser);
   token
+end function;
+
+define function consume-optional-token
+    (parser :: <parser>, text :: <string>) => (token :: false-or(<token>))
+  let token = peek-token(parser);
+  if (token & text = token.token-text)
+    consume-token(parser)
+  end
 end function;
 
 define generic expect-token
@@ -301,11 +308,12 @@ define function parse-message
             <identifier-token> =>
               // Looking at a proto3 message-, enum-, or group-typed field.
               if (syntax = $syntax-proto2)
-                parse-error("proto2 field missing 'optional', 'required', or 'repeated' label: %s",
-                            token);
+                parse-error("proto2 field missing 'optional', 'required', or"
+                              " 'repeated' label: %s", token);
               end;
               add-descriptor-proto-field
-                (message, parse-message-field(parser, syntax, type: token));
+                (message, parse-message-field(parser, syntax,
+                                              type: token, parent: parent));
             <comment-token> =>
               #f;
             otherwise =>
@@ -395,7 +403,8 @@ define function parse-oneof
           | parse-error("oneof must have at least one field: %=", oneof-token);
       otherwise =>
         if (instance?(token, <identifier-token>))
-          let field = parse-message-field(parser, $syntax-proto3, type: token);
+          let field = parse-message-field(parser, $syntax-proto3,
+                                          type: token, parent: parent);
           field-descriptor-proto-oneof-index(field) := oneof-index;
           add-descriptor-proto-field(message, field);
           loop(field-count + 1)
@@ -632,7 +641,7 @@ end function;
 // https://protobuf.com/docs/language-spec#fields
 define function parse-message-field
     (parser :: <parser>, syntax :: <string>,
-     #key label :: false-or(<token>), type :: false-or(<token>))
+     #key label :: false-or(<token>), type :: false-or(<token>), parent :: <string>)
  => (field :: <field-descriptor-proto>)
   let type = type | consume-token(parser);
   // TODO: field types that are fully qualified names. skipping for now since
@@ -647,8 +656,11 @@ define function parse-message-field
   let number = expect-token(parser, <number-token>);
   let delim = token-value(expect-token(parser, #(";", "[")));
   let (options, default, json-name) = ('[' == delim) & parse-field-options(parser);
+  let type-enum-value = type-name-to-enum(type.token-text, parent)
+    | parse-error("couldn't determine enum value for field %s.%s with declared type %s",
+                  parent, name.token-text, type.token-text);
   let field
-    = make(<field-descriptor-proto>,
+    = make(<extended-field-descriptor-proto>,
            name: name.token-text,
            number: number.token-value,
            label: label & select (label.token-value)
@@ -658,7 +670,8 @@ define function parse-message-field
                           end,
            default-value: default,
            json-name: json-name,
-           // type: We just use type-name and don't bother with the type field.
+           type: type-enum-value,
+           scalar-type: enum-to-scalar-type(type-enum-value),
            type-name: type.token-text,
            options: options,
            // TODO: what about syntax = "editions"?

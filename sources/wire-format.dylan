@@ -26,7 +26,7 @@ end;
 // Make a field tag to precede the field data itself, given the scalar type of
 // the field data.
 define function make-tag
-    (field-number :: <int>, type :: <scalar-type>) => (tag :: <int>)
+    (field-number :: <int>, type :: <type>) => (tag :: <int>)
   let wire-type
     = select (type)
         $bool,
@@ -52,7 +52,7 @@ ignore(make-tag);
 
 // Can `type` be used in a packed field?
 define inline function packed-type?
-    (type :: <scalar-type>) => (_ :: <bool>)
+    (type :: <type>) => (_ :: <bool>)
   type == $string | type == $bytes
 end function;
 
