@@ -3,34 +3,28 @@ Synopsis: The public interface to protocol buffers
 
 
 define module protocol-buffers
-  create
-    $max-field-number,
+  use protocol-buffers-base-public, export: all;
+  use google-protobuf, export: all;
 
+  create
     <protocol-buffer-error>,
-    <protocol-buffer-object>,
-      <protocol-buffer-message>,
 
     descriptor-name,
     find-descriptor,
 
-    <protocol-buffer-enum>,
     enum-name-to-enum,
     enum-name-to-value,
     enum-value,
-    enum-value-name,
+    // TODO: currently exported from protocol-buffers-codegen-support but
+    // should be exported here instead, after moving descriptor-name methods
+    // out of the google-protobuf module.
+    //enum-value-name,
     enum-value-to-enum,
     enum-value-to-name,
-
-    // Types
-    <int32>, <uint32>, <int64>, <uint64>,
 
     // Code generator
     <generator>,
     generate-dylan-code,
-
-    // For use by generated code. (TODO: define separate module for these.)
-    set-introspection-data,     // remove
-    store,
 
     // Introspection API
     introspect,

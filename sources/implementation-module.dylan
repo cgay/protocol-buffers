@@ -7,6 +7,7 @@ Module: dylan-user
 
 define module protocol-buffers-impl
   use protocol-buffers;
+  use protocol-buffers-base-private;
   use google-protobuf;
 
   use bit-vector;

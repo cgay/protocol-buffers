@@ -17,6 +17,7 @@ define library protocol-buffers
 
   export
     protocol-buffers,
+    protocol-buffers-codegen-support,
     protocol-buffers-impl,
     google-protobuf;            // descriptor.proto generated code
 end library;

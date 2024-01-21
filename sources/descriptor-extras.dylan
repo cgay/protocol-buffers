@@ -1,12 +1,5 @@
-Module: google-protobuf
+Module: protocol-buffers-impl
 Synopsis: Additional behavior for classes generated from descriptor.proto.
-
-
-// TODO: I think it was a mistake to define this code in the google-protobuf
-// module. There's no reason it can't be defined in protocol-buffers-impl
-// instead and exported from protocol-buffers, and keep the generated module
-// free of manual modifications.
-
 
 //
 // descriptor-name
@@ -127,12 +120,12 @@ define function print-range-object (desc, stream, start, _end)
   end;
 end function;
 
-define generic ranges-overlap? (range1, range2) => (_ :: <boolean>);
+define generic ranges-overlap? (range1, range2) => (_ :: <bool>);
 
 // reserved X reserved
 define method ranges-overlap?
     (range1 :: <descriptor-proto-reserved-range>,
-     range2 :: <descriptor-proto-reserved-range>) => (_ :: <boolean>)
+     range2 :: <descriptor-proto-reserved-range>) => (_ :: <bool>)
   ~empty?(intersection(range(from: range1.descriptor-proto-reserved-range-start,
                              to: range1.descriptor-proto-reserved-range-end - 1),
                        range(from: range2.descriptor-proto-reserved-range-start,
@@ -142,7 +135,7 @@ end method;
 // extension X extension
 define method ranges-overlap?
     (range1 :: <descriptor-proto-extension-range>,
-     range2 :: <descriptor-proto-extension-range>) => (_ :: <boolean>)
+     range2 :: <descriptor-proto-extension-range>) => (_ :: <bool>)
   ~empty?(intersection(range(from: range1.descriptor-proto-extension-range-start,
                              to: range1.descriptor-proto-extension-range-end - 1),
                        range(from: range2.descriptor-proto-extension-range-start,
@@ -152,7 +145,7 @@ end method;
 // reserved X extension
 define method ranges-overlap?
     (range1 :: <descriptor-proto-reserved-range>,
-     range2 :: <descriptor-proto-extension-range>) => (_ :: <boolean>)
+     range2 :: <descriptor-proto-extension-range>) => (_ :: <bool>)
   ~empty?(intersection(range(from: range1.descriptor-proto-reserved-range-start,
                              to: range1.descriptor-proto-reserved-range-end - 1),
                        range(from: range2.descriptor-proto-extension-range-start,
@@ -162,7 +155,7 @@ end method;
 // extension X reserved
 define method ranges-overlap?
     (range1 :: <descriptor-proto-extension-range>,
-     range2 :: <descriptor-proto-reserved-range>) => (_ :: <boolean>)
+     range2 :: <descriptor-proto-reserved-range>) => (_ :: <bool>)
   ~empty?(intersection(range(from: range1.descriptor-proto-extension-range-start,
                              to: range1.descriptor-proto-extension-range-end - 1),
                        range(from: range2.descriptor-proto-reserved-range-start,

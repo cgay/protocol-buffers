@@ -1,7 +1,8 @@
 library: protocol-buffers
 Files: library.dylan
-       interface-module.dylan
+       base-module.dylan
        google-protobuf-module-pb.dylan
+       interface-module.dylan
        implementation-module.dylan
        64-bit.dylan
        utilities.dylan

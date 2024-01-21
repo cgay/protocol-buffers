@@ -52,9 +52,9 @@ define test test-codegen-descriptor-pb ()
       lines
     end,
     method comparable? (line)
-      // Ignore lines we added by hand.
-      ~find-substring(line, "added by hand")
-        & ~find-substring(line, "//     Date: ")
+      // Ignore the generated comments, which vary depending on who generated
+      // the file and when.
+      ~find-substring(line, "//     Date: ")
         & ~find-substring(line, "test-data/")
     end,
     method diff (old, new)
@@ -69,8 +69,8 @@ define test test-codegen-descriptor-pb ()
            current: %s
            new:     %s
            Line %d differs from current version. Do a full diff of the files and
-           if the differences are expected, copy the test file in place and
-           commit it, making sure to retain the lines added by hand.
+           if the differences are expected, copy the test file in place, run the
+           test suite again, and then commit it.
            """,
                      old, new, line-number);
       end;

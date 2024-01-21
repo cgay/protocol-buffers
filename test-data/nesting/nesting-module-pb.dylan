@@ -3,7 +3,8 @@ Synopsis: Code generated for package "nesting" by pbgen.
 
 define module nesting
   use common-dylan;
-  use protocol-buffers;
+  use protocol-buffers-codegen-support;
+  use google-protobuf;
 
   export
     <person>,

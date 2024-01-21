@@ -554,7 +554,7 @@ define constant $module-template
 
     define module %s
       use common-dylan;
-      use protocol-buffers;
+      use protocol-buffers-codegen-support;
 
       export
     %s;

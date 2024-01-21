@@ -192,12 +192,6 @@ define constant $introspection-data = make(<table>);
 // Maps fully-qualified name to an <introspection-data> instance.
 define constant $introspection-data-by-name = make(<string-table>);
 
-// TODO: back compat...remove after updating generated code.
-define function set-introspection-data
-    (desc :: <protocol-buffer-object>, name :: <string>, key, #rest keys) => ()
-  apply(store, name, desc, key, keys);
-end function;
-
 // Called by generated code.  If you change this you'll want to create a
 // backward compatibility function which you can remove after regenerating
 // descriptor-pb.dylan and before comitting your changes. The name "store" and
