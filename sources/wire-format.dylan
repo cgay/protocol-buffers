@@ -27,25 +27,7 @@ end;
 // the field data.
 define function make-tag
     (field-number :: <int>, type :: <scalar-type>) => (tag :: <int>)
-  let wire-type
-    = select (type)
-        $bool,
-        $int32, $sint32, $uint32,
-        $int64, $sint64, $uint64
-          => $wire-type-varint;
-        $fixed32,
-        $float,
-        $sfixed32
-          => $wire-type-i32;
-        $double,
-        $fixed64,
-        $sfixed64
-          => $wire-type-i64;
-        $bytes,
-        $string
-          => $wire-type-len;
-      end;
-  make-wire-tag(field-number, wire-type)
+  make-wire-tag(field-number, type.scalar-type-to-wire-type)
 end function;
 
 ignore(make-tag);

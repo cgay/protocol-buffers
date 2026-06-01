@@ -755,8 +755,8 @@ end function;
 //
 // BNF: OptionName = ( SimpleName | ExtensionName ) [ dot OptionName ] .
 define function parse-uninterpreted-option-name
-    (parser :: <parser>) => (name-parts :: <stretchy-vector>)
-  let parts = make(<stretchy-vector>);
+    (parser :: <parser>) => (name-parts :: <vector*>)
+  let parts = make(<vector*>);
   local method add-part (text, ext?)
           add!(parts, make(<uninterpreted-option-name-part>,
                            name-part: text,

@@ -42,7 +42,7 @@ define test test-codegen-descriptor-pb ()
 
   local
     method read-lines (path)
-      let lines = make(<stretchy-vector>);
+      let lines = make(<vector*>);
       with-open-file (stream = path)
         let line = #f;
         while (line := read-line(stream, on-end-of-stream: #f))

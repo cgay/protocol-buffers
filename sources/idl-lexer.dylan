@@ -33,7 +33,7 @@ define class <token> (<object>)
   // * Comments for "reserved 9;" are dropped.
   // * I'm sure there are other dropped comments.
   // I suspect we need multi-token look-ahead to handle it correctly.
-  slot token-comments :: <stretchy-vector> = make(<stretchy-vector>);
+  slot token-comments :: <vector*> = make(<vector*>);
 end class;
 
 define method print-object
@@ -106,11 +106,11 @@ define class <lexer> (<object>)
     init-keyword: comments?:;
   // Sequence of consecutively returned comment tokens to be attached to the
   // next non-comment token for eventual output by the code generator.
-  slot lexer-comments :: <stretchy-vector> = make(<stretchy-vector>);
+  slot lexer-comments :: <vector*> = make(<vector*>);
 end class;
 
 define function clear-comments (lex :: <lexer>)
-  lex.lexer-comments := make(<stretchy-vector>);
+  lex.lexer-comments := make(<vector*>);
 end;
 
 define generic read-token
@@ -268,7 +268,7 @@ end function read-token-1;
 
 define function read-whitespace (lex :: <lexer>) => (token :: <whitespace-token>)
   // (We might want to optimize the single space case.)
-  let whitespace = make(<stretchy-vector>);
+  let whitespace = make(<vector*>);
   for (c = peek-char(lex) then peek-char(lex),
        while: c & whitespace?(c))
     add!(whitespace, consume-char(lex))
@@ -296,7 +296,7 @@ end function;
 define function read-numeric-literal
     (lex :: <lexer>, char :: <char>, sign :: <int>, #key dot-seen?)
  => (token :: <token>)
-  let text = make(<stretchy-vector>); // full text of token.
+  let text = make(<vector*>); // full text of token.
   let int = 0;
   let state = iff(dot-seen?, #"fraction", #"start");
   let frac = 0;
@@ -423,7 +423,7 @@ end function read-numeric-literal;
 // identifiers (with dots) are parsed as separate tokens.
 define function read-identifier-or-reserved-word
     (lex :: <lexer>) => (token :: <token>)
-  let identifier = make(<stretchy-vector>);
+  let identifier = make(<vector*>);
   iterate loop (ch = peek-char(lex))
     if (ch & (ch == '_' | alphanumeric?(ch)))
       add!(identifier, consume-char(lex));
@@ -446,7 +446,7 @@ end function;
 define function read-comment
     (lex :: <lexer>) => (token :: <comment-token>)
   assert('/' == consume-char(lex));
-  let comment = make(<stretchy-vector>);
+  let comment = make(<vector*>);
   add!(comment, '/');
   let ch = peek-char(lex)
              | lex-error(lex, "end of stream while reading comment");

@@ -142,23 +142,30 @@ end function;
 
 // A set of constants to identify the scalar types defined in the protobuf
 // spec.  https://developers.google.com/protocol-buffers/docs/proto3#scalar
-define enum <scalar-type> ()
-  $bool;
-  $bytes;
-  $double;
-  $fixed32;
-  $fixed64;
-  $float;
-  $int32;
-  $int64;
-  $sfixed32;
-  $sfixed64;
-  $sint32;
-  $sint64;
-  $string;
-  $uint32;
-  $uint64;
-end enum;
+define enum-class <scalar-type> (<object>)
+  constant slot scalar-type-to-wire-type :: <int>, required-init-keyword: wire-type:;
+
+  $bool     (wire-type: $wire-type-varint);
+  $int32    (wire-type: $wire-type-varint);
+  $int64    (wire-type: $wire-type-varint);
+  $sint32   (wire-type: $wire-type-varint);
+  $sint64   (wire-type: $wire-type-varint);
+  $uint32   (wire-type: $wire-type-varint);
+  $uint64   (wire-type: $wire-type-varint);
+
+  $fixed32  (wire-type: $wire-type-i32);
+  $float    (wire-type: $wire-type-i32);
+  $sfixed32 (wire-type: $wire-type-i32);
+
+  $double   (wire-type: $wire-type-i64);
+  $fixed64  (wire-type: $wire-type-i64);
+  $sfixed64 (wire-type: $wire-type-i64);
+
+  $bytes    (wire-type: $wire-type-len);
+  $string   (wire-type: $wire-type-len);
+end enum-class;
+
+ignore($scalar-type-instances);
 
 // A type to clarify when something is used as an index into a sequence.
 define constant <index> = <uint64>;

@@ -48,7 +48,7 @@ define class <generator> (<object>)
   // Keeps track of parsed files.
   constant slot generator-file-set :: <file-descriptor-set>
     = make(<file-descriptor-set>,
-           file: make(<stretchy-vector>));
+           file: make(<vector*>));
 
   // Maps from AST nodes (descriptors) to sequences of <comment-token> which
   // are the comments that precede the descriptor in the .proto file.
@@ -133,7 +133,7 @@ define function export (gen :: <generator>, name :: <string>)
   let names = element(gen.exported-names, *current-module*,
                       default: #f);
   if (~names)
-    names := make(<stretchy-vector>);
+    names := make(<vector*>);
     gen.exported-names[*current-module*] := names;
   end;
   add-new!(names, name, test: \=);
@@ -256,7 +256,7 @@ define method emit-code (gen :: <generator>, message :: <descriptor-proto>, #key
   // message class definition
   export(gen, class-name);
   emit-comments(gen, message);
-  let after-class-def = make(<stretchy-vector>);
+  let after-class-def = make(<vector*>);
   code(gen,
        """
        define class %s (<protocol-buffer-message>)

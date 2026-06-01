@@ -4,7 +4,7 @@ Synopsis: Tests for idl-lexer.dylan
 
 define function read-all
     (input :: <string>, #key whitespace? = #t, comments? = #t) => (tokens :: <seq>)
-  let tokens = make(<stretchy-vector>);
+  let tokens = make(<vector*>);
   with-input-from-string (stream = input)
     let lex = make(<lexer>,
                    stream: stream,
