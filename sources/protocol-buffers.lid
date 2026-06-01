@@ -14,7 +14,8 @@ Files: library.dylan
        idl-parser.dylan
        api.dylan
        codegen.dylan
-Platforms: x86_64-darwin
+Platforms: aarch64-darwin
+           x86_64-darwin
            x86_64-freebsd
            x86_64-linux
            x86_64-netbsd
